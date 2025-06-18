@@ -45,7 +45,7 @@ except:
 dataset = load_dataset("OptimalScale/ClimbLab", streaming=True, cache_dir="./cache")
 sample = []
 for i, item in enumerate(dataset["train"]):
-    if i >= 100000:
+    if i >= 1000000:
         break
     sample.append(item)
 
