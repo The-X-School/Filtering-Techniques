@@ -8,34 +8,18 @@ from transformers import AutoTokenizer, AutoModel
 from huggingface_hub import login
 import warnings
 
-# Suppress torchvision warnings and compatibility issues
-warnings.filterwarnings("ignore", category=UserWarning)
+warnings.filterwarnings("ignore")
 os.environ["TORCH_LOGS"] = "0"
 
-# Check for torchvision compatibility issues
-def check_torch_compatibility():
-    """Check and fix torch/torchvision compatibility"""
-    try:
-        torch_version = torch.__version__
-        print(f"PyTorch version: {torch_version}")
-        return True
-    except Exception as e:
-        print(f"PyTorch compatibility issue: {e}")
-        return False
-
-# Comprehensive monkey patch to fix the _attn_implementation issue
-def patch_model_if_needed(model):
-    """Add missing _attn_implementation attribute recursively to all model components"""
+def patch_model(model):
     def patch_recursive(module):
         if not hasattr(module, '_attn_implementation'):
             module._attn_implementation = "eager"
-        
-        for attr_name in ['encoder', 'decoder', 'model', 'transformer', 'bert', 'roberta']:
+        for attr_name in ['encoder', 'decoder', 'model', 'transformer']:
             if hasattr(module, attr_name):
                 attr = getattr(module, attr_name)
                 if hasattr(attr, '__dict__'):
                     patch_recursive(attr)
-        
         for child in module.children():
             patch_recursive(child)
     
@@ -44,43 +28,30 @@ def patch_model_if_needed(model):
     patch_recursive(model)
     return model
 
-# Check PyTorch compatibility
-if not check_torch_compatibility():
-    print("PyTorch compatibility issues detected. Continuing with caution...")
-
-# Login to Hugging Face
 login()
 
 try:
-    # Try NV-Retriever first
     tokenizer = AutoTokenizer.from_pretrained("nvidia/NV-Retriever-v1")
-    model = AutoModel.from_pretrained("nvidia/NV-Retriever-v1",
-        trust_remote_code=True,
-        torch_dtype=torch.float32,
-        device_map="cpu"
-    )
-    model = patch_model_if_needed(model)
+    model = AutoModel.from_pretrained("nvidia/NV-Retriever-v1", trust_remote_code=True, torch_dtype=torch.float32, device_map="cpu")
+    model = patch_model(model)
     model_type = "nv-retriever"
 except:
-    # Fallback to sentence-transformers
     os.system("pip install sentence-transformers")
     from sentence_transformers import SentenceTransformer
     model = SentenceTransformer('all-MiniLM-L6-v2')
     tokenizer = None
     model_type = "sentence-transformers"
 
-# Load dataset
 dataset = load_dataset("OptimalScale/ClimbLab", streaming=True, cache_dir="./cache")
 sample = []
 for i, item in enumerate(dataset["train"]):
-    if i >= 30:
+    if i >= 100000:
         break
     sample.append(item)
 
 docs = ["passage: " + row["text"] for row in sample]
 original_count = len(docs)
 
-# Generate embeddings
 if model_type == "sentence-transformers":
     embeddings_np = model.encode(docs, convert_to_numpy=True)
 else:
@@ -98,36 +69,40 @@ else:
         embeds = masked.sum(dim=1) / mask.sum(dim=1, keepdim=True)
         embeddings_np = embeds.cpu().numpy()
     except:
-        # Fallback to sentence-transformers if NV-Retriever fails during inference
         os.system("pip install sentence-transformers")
         from sentence_transformers import SentenceTransformer
         fallback_model = SentenceTransformer('all-MiniLM-L6-v2')
         embeddings_np = fallback_model.encode(docs, convert_to_numpy=True)
 
-# Quality filtering based on embeddings
 filtered_indices = []
 
-# Remove outliers using DBSCAN clustering
-clustering = DBSCAN(eps=0.5, min_samples=2, metric='cosine')
+# Stricter clustering (lower eps = tighter clusters)
+clustering = DBSCAN(eps=0.4, min_samples=2, metric='cosine')
 cluster_labels = clustering.fit_predict(embeddings_np)
-non_outliers = [i for i, label in enumerate(cluster_labels) if label != -1]
+outliers = [i for i, label in enumerate(cluster_labels) if label == -1]
 
-# Filter by embedding magnitude
+# Remove bottom 30% by embedding magnitude (stricter)
 embedding_norms = np.linalg.norm(embeddings_np, axis=1)
-norm_threshold = np.percentile(embedding_norms, 25)
+norm_threshold = np.percentile(embedding_norms, 30)
 
-# Filter by cosine similarity to centroid
+# Remove bottom 30% by similarity to centroid (stricter)
 centroid = np.mean(embeddings_np, axis=0)
 similarities = cosine_similarity(embeddings_np, centroid.reshape(1, -1)).flatten()
-similarity_threshold = np.percentile(similarities, 25)
+similarity_threshold = np.percentile(similarities, 30)
 
-# Combine all filtering criteria
+# Additional filter: document length
+doc_lengths = [len(doc.split()) for doc in docs]
+length_threshold = np.percentile(doc_lengths, 20)  # Remove shortest 20%
+
 for i in range(len(docs)):
-    if (i in non_outliers and 
-        embedding_norms[i] > norm_threshold and 
-        similarities[i] > similarity_threshold):
+    is_outlier = i in outliers
+    low_magnitude = embedding_norms[i] <= norm_threshold
+    low_similarity = similarities[i] <= similarity_threshold
+    too_short = doc_lengths[i] <= length_threshold
+    
+    if is_outlier or low_magnitude or low_similarity or too_short:
         filtered_indices.append(i)
 
-filtered_count = original_count - len(filtered_indices)
+filtered_count = len(filtered_indices)
 
-print(f"Filtered out {filtered_count} files out of {original_count} total files")
+print(f"Filtered out {filtered_count} files out of {original_count} total files") 
