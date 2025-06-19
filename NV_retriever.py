@@ -42,14 +42,18 @@ except:
     tokenizer = None
     model_type = "sentence-transformers"
 
-dataset = load_dataset("OptimalScale/ClimbLab", streaming=True, cache_dir="./cache")
+dataset = load_dataset("nvidia/ClimbLab", streaming=True, cache_dir="./cache")
 sample = []
 for i, item in enumerate(dataset["train"]):
     if i >= 1000000:
         break
     sample.append(item)
 
-docs = ["passage: " + row["text"] for row in sample]
+if tokenizer:
+    docs = [tokenizer.decode(row["tokens"]) for row in sample]
+else:
+    docs = ["passage: " + row.get("text", "") for row in sample]
+
 original_count = len(docs)
 
 if model_type == "sentence-transformers":
@@ -68,7 +72,9 @@ else:
         masked = last_hidden * mask.unsqueeze(-1)
         embeds = masked.sum(dim=1) / mask.sum(dim=1, keepdim=True)
         embeddings_np = embeds.cpu().numpy()
-    except:
+    except Exception as e:
+        print(f"Error during embedding generation with NV-Retriever: {e}")
+        print("Falling back to sentence-transformers.")
         os.system("pip install sentence-transformers")
         from sentence_transformers import SentenceTransformer
         fallback_model = SentenceTransformer('all-MiniLM-L6-v2')
