@@ -31,12 +31,12 @@ output_file = os.path.join(args.output_path, f"{next_num:05d}.jsonl")
 _tmp_dir = os.path.join(args.output_path, "_tmp")
 Path(_tmp_dir).mkdir(parents=True, exist_ok=True)
 
-
+# set the threshold to 0.99
 dist_executor = LocalPipelineExecutor(
     skip_completed=True,
     pipeline=[
         JsonlReader(f"{args.input_path}", text_key="text", default_metadata= {}),
-        FastTextClassifierFilter(f"PreSelect-classifier.bin", keep_labels=[("1",0.99)]), 
+        FastTextClassifierFilter(f"PreSelect-classifier.bin", keep_labels=[("1",0.995)]), 
         JsonlWriter(_tmp_dir, compression=None)
     ],
     tasks=1,

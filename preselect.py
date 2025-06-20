@@ -19,7 +19,6 @@ import fasttext
 
 # Load the ClimbLab dataset (default split)
 # use text dataset instead of tokenized dataset
-print("Loading ClimbLab dataset...")
 dataset = load_dataset("OptimalScale/ClimbLab", split="train", streaming=True)
 
 # sample = dataset.select(range(100)) doesn't work with streaming dataset
@@ -31,21 +30,16 @@ with open(output_jsonl, "w", encoding="utf-8") as f:
         if 'text' in ex:
             f.write(json.dumps({"text": ex["text"]}) + "\n")
 
-print("Checking for cached model...")
 # Check if model is already cached
 cached_path = try_to_load_from_cache("hkust-nlp/preselect-fasttext-classifier", "PreSelect-classifier.bin")
 if cached_path is not None:
-    print(f"Using cached model at: {cached_path}")
     model_path = cached_path
 else:
-    print("Downloading model (this may take a while the first time)...")
     model_path = hf_hub_download(repo_id="hkust-nlp/preselect-fasttext-classifier", filename="PreSelect-classifier.bin")
     print(f"Model downloaded to: {model_path}")
 
-print("Loading fasttext model...")
 model = fasttext.load_model(model_path)
 
-print("Processing samples...")
 for ex in sample:
     if 'text' in ex:
         text = ex["text"].replace('\n', ' ').strip()
