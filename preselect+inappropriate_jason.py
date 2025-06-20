@@ -566,7 +566,7 @@ def classify_toxicity_batch(texts: List[str], threshold=0.5, batch_size=32) -> L
     
     return results
 
-def filter_dataset_with_toxic_bert(dataset_stream, toxicity_threshold=0.7, max_samples=None, batch_size=32):
+def filter_dataset_with_toxic_bert(dataset_stream, toxicity_threshold=0.7, max_samples=None, batch_size=32, use_cache=True):
     """
     Filter the ClimbLab dataset using toxic-bert with batch processing
     
@@ -575,6 +575,7 @@ def filter_dataset_with_toxic_bert(dataset_stream, toxicity_threshold=0.7, max_s
         toxicity_threshold: Confidence threshold (0.1-0.9, higher = more strict)
         max_samples: Limit samples for testing (None = process all)
         batch_size: Number of samples to process in each batch
+        use_cache: Whether to use caching for results
     
     Returns:
         safe_data: List of clean samples
@@ -734,22 +735,28 @@ print("="*60)
 NUM_SAMPLES_TO_PROCESS = 1000   # 👈 CHANGE THIS NUMBER!
 TOXICITY_THRESHOLD = 0.7        # 👈 ADJUST STRICTNESS (0.5-0.9)
 QUALITY_THRESHOLD = 0.3         # 👈 MINIMUM QUALITY SCORE
-SAVE_RESULTS = False            # 👈 Set to False to skip saving files
+SAVE_RESULTS = False           # 👈 Set to True to save files
+USE_CACHE = False               # 👈 Set to False to disable caching
 
 print(f"\n⚙️  CURRENT SETTINGS:")
 print(f"   📊 Samples to process: {NUM_SAMPLES_TO_PROCESS:,}")
 print(f"   🎯 Toxicity threshold: {TOXICITY_THRESHOLD}")
 print(f"   📈 Quality threshold: {QUALITY_THRESHOLD}")
 print(f"   💾 Save results: {'Yes' if SAVE_RESULTS else 'No'}")
+print(f"   🔄 Use cache: {'Yes' if USE_CACHE else 'No'}")
 print(f"   📁 Dataset variable: ds")
 
 print(f"\n🚀 STARTING FILTERING...")
+
+# Initialize cache if enabled
+text_cache = TextCache() if USE_CACHE else None
 
 # Start filtering with your dataset
 safe_samples, toxic_samples, filtering_stats = filter_dataset_with_toxic_bert(
     ds,                           # Your dataset variable
     toxicity_threshold=TOXICITY_THRESHOLD,
-    max_samples=NUM_SAMPLES_TO_PROCESS
+    max_samples=NUM_SAMPLES_TO_PROCESS,
+    use_cache=USE_CACHE
 )
 
 # Print detailed results

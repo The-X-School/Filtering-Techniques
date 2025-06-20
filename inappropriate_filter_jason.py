@@ -21,6 +21,13 @@ from transformers import pipeline
 import torch
 from collections import defaultdict
 import time
+import numpy as np
+from google.oauth2.credentials import Credentials
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaFileUpload
+from google.auth.transport.requests import Request
+from google_auth_oauthlib.flow import InstalledAppFlow
 
 print("🔄 Loading toxic-bert model...")
 
@@ -184,9 +191,6 @@ class TextCache:
         if len(self.cache) % 100 == 0:
             self._save_cache()
 
-# Initialize cache
-text_cache = TextCache()
-
 # Modify classify_toxicity to use cache
 def classify_toxicity(text, threshold=0.5):
     """
@@ -284,7 +288,7 @@ def classify_toxicity(text, threshold=0.5):
 # 🔧 IMPROVEMENT: Enhanced filtering with multiple criteria
 def filter_dataset_with_toxic_bert(dataset_stream, toxicity_threshold=0.7, max_samples=None, 
                                    save_progress=True, batch_size=100, 
-                                   enable_rule_based=True, enable_ml=True):
+                                   enable_rule_based=True, enable_ml=True, use_cache=True):
     """
     Filter the ClimbLab dataset using toxic-bert and rule-based filtering
     
@@ -296,6 +300,7 @@ def filter_dataset_with_toxic_bert(dataset_stream, toxicity_threshold=0.7, max_s
         batch_size: How often to print progress updates
         enable_rule_based: Use rule-based filtering
         enable_ml: Use ML-based filtering
+        use_cache: Use cache for classification results
     
     Returns:
         safe_data: List of clean samples
@@ -511,112 +516,35 @@ def print_filtering_results(safe_data, toxic_data, stats):
         print(f"   Length: {analysis.get('text_length', 'unknown')} chars")
         print(f"   Text: {text_preview}")
 
-# Add enhanced export functionality
-def export_filtered_data(safe_data: List[Dict], toxic_data: List[Dict], 
-                        export_dir: str = "filtered_data",
-                        filename_prefix: str = "inappropriate_filter"):
-    """
-    Export filtered data to JSON files with detailed metadata
-    
-    Args:
-        safe_data: List of safe samples
-        toxic_data: List of toxic samples
-        export_dir: Directory to save exports
-        filename_prefix: Prefix for export files
-    """
-    # Create timestamped subdirectory for this run
-    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    run_dir = Path(export_dir) / f"run_{timestamp}"
-    run_dir.mkdir(parents=True, exist_ok=True)
-    
-    # Prepare metadata
-    metadata = {
-        'timestamp': datetime.now().isoformat(),
-        'total_samples': len(safe_data) + len(toxic_data),
-        'safe_samples': len(safe_data),
-        'toxic_samples': len(toxic_data),
-        'toxicity_threshold': 0.7,  # Current threshold
-        'model_info': {
-            'name': 'toxic-bert',
-            'source': 'unitary/toxic-bert'
-        }
-    }
-    
-    # Export safe data
-    safe_export = {
-        'metadata': metadata,
-        'samples': safe_data
-    }
-    safe_file = run_dir / f"{filename_prefix}_safe.json"
-    with open(safe_file, 'w', encoding='utf-8') as f:
-        json.dump(safe_export, f, indent=2, ensure_ascii=False)
-    
-    # Export toxic data
-    toxic_export = {
-        'metadata': metadata,
-        'samples': toxic_data
-    }
-    toxic_file = run_dir / f"{filename_prefix}_toxic.json"
-    with open(toxic_file, 'w', encoding='utf-8') as f:
-        json.dump(toxic_export, f, indent=2, ensure_ascii=False)
-    
-    # Export statistics
-    stats_file = run_dir / f"{filename_prefix}_stats.json"
-    with open(stats_file, 'w', encoding='utf-8') as f:
-        json.dump(metadata, f, indent=2)
-    
-    # Create a summary file for quick reference
-    summary = {
-        'run_timestamp': timestamp,
-        'safe_count': len(safe_data),
-        'toxic_count': len(toxic_data),
-        'files': {
-            'safe': str(safe_file.relative_to(export_dir)),
-            'toxic': str(toxic_file.relative_to(export_dir)),
-            'stats': str(stats_file.relative_to(export_dir))
-        }
-    }
-    summary_file = run_dir / "summary.json"
-    with open(summary_file, 'w', encoding='utf-8') as f:
-        json.dump(summary, f, indent=2)
-    
-    print(f"\n📁 Exported filtered data to {run_dir}:")
-    print(f"   ✅ Safe samples: {safe_file}")
-    print(f"   ⚠️ Toxic samples: {toxic_file}")
-    print(f"   📊 Statistics: {stats_file}")
-    print(f"   📑 Summary: {summary_file}")
-    
-    return {
-        'run_dir': str(run_dir),
-        'safe_file': str(safe_file),
-        'toxic_file': str(toxic_file),
-        'stats_file': str(stats_file),
-        'summary_file': str(summary_file)
-    }
-
 # 🚀 CUSTOMIZABLE FILTERING SETUP
 print("\n" + "="*60)
 print("🚀 READY TO FILTER YOUR CLIMBLAB DATASET!")
 print("="*60)
 
 # 🎛️ CUSTOMIZE THESE SETTINGS:
-NUM_SAMPLES_TO_PROCESS = 1000   # 👈 CHANGE THIS NUMBER!
-TOXICITY_THRESHOLD = 0.7        # 👈 ADJUST STRICTNESS (0.5-0.9)
-SAVE_RESULTS = False         # 👈 Set to False to skip saving files
+NUM_SAMPLES_TO_PROCESS = 1000    # 👈 CHANGE THIS NUMBER!
+TOXICITY_THRESHOLD = 0.7         # 👈 ADJUST STRICTNESS (0.5-0.9)
+SAVE_RESULTS = False             # 👈 Set to True to save files
+USE_CACHE = False               # 👈 Set to False to disable caching
 
 print(f"\n⚙️  CURRENT SETTINGS:")
 print(f"   📊 Samples to process: {NUM_SAMPLES_TO_PROCESS:,}")
 print(f"   🎯 Toxicity threshold: {TOXICITY_THRESHOLD}")
 print(f"   💾 Save results: {'Yes' if SAVE_RESULTS else 'No'}")
+print(f"   🔄 Use cache: {'Yes' if USE_CACHE else 'No'}")
 print(f"   📁 Dataset variable: ds")
 
 print(f"\n🚀 STARTING FILTERING...")
+
+# Initialize cache if enabled
+text_cache = TextCache() if USE_CACHE else None
 
 # Start filtering with your dataset
 safe_samples, toxic_samples, filtering_stats = filter_dataset_with_toxic_bert(
     ds,                           # Your dataset variable
     toxicity_threshold=TOXICITY_THRESHOLD,
-    max_samples=NUM_SAMPLES_TO_PROCESS
+    max_samples=NUM_SAMPLES_TO_PROCESS,
+    use_cache=USE_CACHE
 )
 
 # Print detailed results
@@ -624,7 +552,7 @@ print_filtering_results(safe_samples, toxic_samples, filtering_stats)
 
 # Export results if enabled
 if SAVE_RESULTS:
-    export_results = export_filtered_data(safe_samples, toxic_samples)
+    export_results = export_filtered_data(safe_samples, toxic_samples, use_gdrive=USE_GDRIVE, gdrive_creds=GDRIVE_CREDS)
     print("\n💾 Results saved successfully!")
     print(f"📁 Find them in: {export_results['run_dir']}")
 else:
@@ -632,7 +560,8 @@ else:
     print("💡 To save results, set SAVE_RESULTS = True")
 
 # Save final cache
-text_cache._save_cache()
+if text_cache:
+    text_cache._save_cache()
 
 print("\n✅ FILTERING AND EXPORT COMPLETE!")
 
