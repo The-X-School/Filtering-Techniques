@@ -1,0 +1,58 @@
+{
+    "pipeline": [
+        {
+            "limit": -1,
+            "skip": 0,
+            "text_key": "text",
+            "id_key": "id",
+            "adapter": "<bound method BaseReader._default_adapter of \ud83d\udcd6 - READER: \ud83d\udc3f Jsonl>",
+            "_empty_warning": false,
+            "default_metadata": {},
+            "data_folder": "DataFolder(path='/Users/newton/Documents/GitHub/Filtering-Techniques/climblab_sample.jsonl', fs=<fsspec.implementations.local.LocalFileSystem object at 0x104c39a00>)",
+            "paths_file": null,
+            "recursive": true,
+            "glob_pattern": null,
+            "shuffle_files": false,
+            "file_progress": false,
+            "doc_progress": false,
+            "compression": "infer"
+        },
+        {
+            "exclusion_writer": null,
+            "batch_size": 1,
+            "model_url": "PreSelect-classifier.bin",
+            "keep_labels": [
+                [
+                    "1",
+                    0.5
+                ]
+            ],
+            "remove_labels": null,
+            "filter_mode": "DOCUMENT",
+            "newline_replacement": "",
+            "save_labels_in_metadata": true,
+            "_model": null
+        },
+        {
+            "compression": null,
+            "output_folder": "DataFolder(path='/Users/newton/Documents/GitHub/Filtering-Techniques/filtered_output', fs=<fsspec.implementations.local.LocalFileSystem object at 0x104c39a00>)",
+            "max_file_size": -1,
+            "file_id_counter": {},
+            "output_filename": "<string.Template object at 0x1071b1d60>",
+            "output_mg": "<datatrove.io.OutputFileManager object at 0x1078f6780>",
+            "adapter": "<bound method DiskWriter._default_adapter of \ud83d\udcbd - WRITER: \ud83d\udc3f Jsonl>",
+            "expand_metadata": false
+        }
+    ],
+    "logging_dir": "DataFolder(path='/Users/newton/Documents/GitHub/Filtering-Techniques/logs/2025-06-18_12-05-28_tdffe', fs=<fsspec.implementations.local.LocalFileSystem object at 0x104c39a00>)",
+    "skip_completed": true,
+    "randomize_start_duration": 0,
+    "tasks": 1,
+    "workers": 1,
+    "start_method": "forkserver",
+    "local_tasks": 1,
+    "local_rank_offset": 0,
+    "depends": null,
+    "_launched": true,
+    "world_size": 1
+}

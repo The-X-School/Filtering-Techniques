@@ -1,0 +1,23 @@
+2025-06-19 10:16:53.395 | INFO     | datatrove.utils.logging:add_task_logger:58 - Launching pipeline for rank=0
+2025-06-19 10:16:53.395 | INFO     | datatrove.utils.logging:log_pipeline:90 - 
+--- 🛠️ PIPELINE 🛠
+📖 - READER: 🐿 Jsonl
+🔻 - FILTER: 🤖 fastText
+💽 - WRITER: 🐿 Jsonl
+2025-06-19 10:16:53.400 | INFO     | datatrove.pipeline.readers.base:read_files_shard:201 - Reading input file , 1/1
+2025-06-19 10:17:03.068 | SUCCESS  | datatrove.executor.base:_run_for_rank:98 - Processing done for rank=0
+2025-06-19 10:17:03.070 | INFO     | datatrove.executor.base:_run_for_rank:104 - 
+
+📉📉📉 Stats: Task 0 📉📉📉
+
+Total Runtime: 9 seconds
+
+📖 - READER: 🐿 Jsonl
+    Runtime: (0.05%) 0 seconds [0.01 milliseconds±0.01 milliseconds/doc]
+    Stats: {input_files: 1, doc_len: 2681365 [min=56, max=148145, 2681.36±6355/doc], documents: 1000 [1000.00/input_file]}
+🔻 - FILTER: 🤖 fastText
+    Runtime: (99.79%) 9 seconds [9.63 milliseconds±278.64 milliseconds/doc]
+    Stats: {kept_span: 712, total: 1000, forwarded: 712, doc_len: 2154841 [min=56, max=148145, 3026.46±7262/doc], removed_span: 288, dropped: 288}
+💽 - WRITER: 🐿 Jsonl
+    Runtime: (0.16%) 0 seconds [0.02 milliseconds±0.10 milliseconds/doc]
+    Stats: {XXXXX.jsonl: 712, total: 712, doc_len: 2154841 [min=56, max=148145, 3026.46±7262/doc]}
