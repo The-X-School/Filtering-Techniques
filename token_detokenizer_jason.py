@@ -3,9 +3,13 @@ import json
 from datasets import load_dataset
 from transformers import GPT2Tokenizer
 from tqdm import tqdm
+from huggingface_hub import login
 
+# 🔐 Paste your token between the quotes (keep it private!)
+HF_TOKEN = "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"
+login(token=HF_TOKEN)
 
-def detokenize_climblab(output_path: str, output_jsonl: bool = False, max_samples: int = 500, print_samples: int = 10):
+def detokenize_climblab(output_path: str, output_jsonl: bool = False, max_samples: int = None, print_samples: int = 0):
     # Load tokenizer
     tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
 
@@ -48,7 +52,7 @@ def detokenize_climblab(output_path: str, output_jsonl: bool = False, max_sample
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Detokenize NVIDIA ClimbLab dataset to text format.")
+    parser = argparse.ArgumentParser(description="Detokenize OptimalScale ClimbLab dataset to text format.")
     parser.add_argument("--output", type=str, default="climblab_detokenized.json", help="Output file path")
     parser.add_argument("--jsonl", action="store_true", help="Output as JSONL instead of a single JSON file")
     parser.add_argument("--max_samples", type=int, default=None, help="Maximum number of samples to process")
