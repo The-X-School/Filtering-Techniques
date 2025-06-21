@@ -15,8 +15,8 @@ from typing import List, Dict, Any
 # =====================
 OUTPUT_PATH = "climblab_detokenized.json"
 OUTPUT_JSONL = False
-MAX_SAMPLES = 10
-PRINT_SAMPLES = 5
+MAX_SAMPLES = 100
+PRINT_SAMPLES = 10
 BATCH_SIZE = 0      # Auto-detect batch size (set to positive number to override)
 NUM_WORKERS = 0     # Auto-detect workers (set to positive number to override)
 # =====================
