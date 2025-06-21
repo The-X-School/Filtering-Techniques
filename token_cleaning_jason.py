@@ -135,6 +135,13 @@ def process_climblab_dataset(
     try:
         dataset = load_dataset("nvidia/ClimbLab", split="train", streaming=True)
         logger.info("✅ Dataset loaded successfully!")
+        # Print the first sample's keys for debugging
+        first_sample = next(iter(dataset))
+        print("First sample keys:", first_sample.keys(), flush=True)
+        print("First sample:", first_sample, flush=True)
+        logger.info(f"First sample keys: {list(first_sample.keys())}")
+        logger.info(f"First sample: {first_sample}")
+        return  # Exit after printing for debugging
     except Exception as e:
         logger.error(f"❌ Error loading dataset: {e}")
         logger.error("📦 Make sure you're connected to the internet and have access to the dataset")
