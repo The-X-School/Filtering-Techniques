@@ -1,7 +1,10 @@
 import re
 import json
+import hashlib
+import os
 from datetime import datetime
 from typing import List, Dict, Any, Tuple
+from pathlib import Path
 
 from huggingface_hub import login
 from datasets import load_dataset
@@ -18,6 +21,13 @@ from transformers import pipeline
 import torch
 from collections import defaultdict
 import time
+import numpy as np
+from google.oauth2.credentials import Credentials
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaFileUpload
+from google.auth.transport.requests import Request
+from google_auth_oauthlib.flow import InstalledAppFlow
 
 print("🔄 Loading toxic-bert model...")
 
@@ -138,11 +148,60 @@ def rule_based_filter(text: str) -> Dict[str, Any]:
         'confidence': min(confidence, 1.0)
     }
 
+# Add cache functionality
+class TextCache:
+    """Cache for storing classification results"""
+    def __init__(self, cache_file="filter_cache.json"):
+        self.cache_file = cache_file
+        self.cache = self._load_cache()
+    
+    def _load_cache(self) -> Dict:
+        """Load cache from file if it exists"""
+        if os.path.exists(self.cache_file):
+            try:
+                with open(self.cache_file, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            except Exception as e:
+                print(f"⚠️ Error loading cache: {e}")
+                return {}
+        return {}
+    
+    def _save_cache(self):
+        """Save cache to file"""
+        try:
+            with open(self.cache_file, 'w', encoding='utf-8') as f:
+                json.dump(self.cache, f, indent=2)
+        except Exception as e:
+            print(f"⚠️ Error saving cache: {e}")
+    
+    def _get_text_hash(self, text: str) -> str:
+        """Generate a hash for the text"""
+        return hashlib.md5(text.encode('utf-8')).hexdigest()
+    
+    def get(self, text: str) -> Dict:
+        """Get cached result for text if it exists"""
+        text_hash = self._get_text_hash(text)
+        return self.cache.get(text_hash)
+    
+    def put(self, text: str, result: Dict):
+        """Cache result for text"""
+        text_hash = self._get_text_hash(text)
+        self.cache[text_hash] = result
+        # Save every 100 new entries
+        if len(self.cache) % 100 == 0:
+            self._save_cache()
+
+# Modify classify_toxicity to use cache
 def classify_toxicity(text, threshold=0.5):
     """
     Use toxic-bert to classify if text is toxic
     Returns: dict with toxicity classification and confidence
     """
+    # Check cache first
+    cached_result = text_cache.get(text)
+    if cached_result:
+        return cached_result
+    
     try:
         # Handle empty or very short text
         if not text or len(text.strip()) < 3:
@@ -196,7 +255,7 @@ def classify_toxicity(text, threshold=0.5):
         # Apply threshold for final decision
         final_toxic = is_toxic and confidence > threshold
         
-        return {
+        result = {
             'is_toxic': final_toxic,
             'is_safe': not final_toxic,
             'confidence': confidence,
@@ -204,25 +263,32 @@ def classify_toxicity(text, threshold=0.5):
             'raw_score': result['score'],
             'text_length': len(text),
             'was_truncated': len(text) > 2000,
-            'rule_based_reasons': rule_result['reasons'] if rule_result['is_inappropriate'] else []
+            'rule_based_reasons': rule_result['reasons'] if rule_result['is_inappropriate'] else [],
+            'timestamp': datetime.now().isoformat()
         }
         
+        # Cache the result
+        text_cache.put(text, result)
+        return result
+        
     except Exception as e:
-        print(f"⚠️ Error classifying text: {e}")
-        # Default to safe if there's an error
-        return {
+        error_result = {
             'is_toxic': False,
             'is_safe': True,
             'confidence': 0.0,
             'label': 'ERROR',
             'error': str(e),
-            'text_length': len(text) if text else 0
+            'text_length': len(text) if text else 0,
+            'timestamp': datetime.now().isoformat()
         }
+        # Cache errors too
+        text_cache.put(text, error_result)
+        return error_result
 
 # 🔧 IMPROVEMENT: Enhanced filtering with multiple criteria
 def filter_dataset_with_toxic_bert(dataset_stream, toxicity_threshold=0.7, max_samples=None, 
                                    save_progress=True, batch_size=100, 
-                                   enable_rule_based=True, enable_ml=True):
+                                   enable_rule_based=True, enable_ml=True, use_cache=True):
     """
     Filter the ClimbLab dataset using toxic-bert and rule-based filtering
     
@@ -234,6 +300,7 @@ def filter_dataset_with_toxic_bert(dataset_stream, toxicity_threshold=0.7, max_s
         batch_size: How often to print progress updates
         enable_rule_based: Use rule-based filtering
         enable_ml: Use ML-based filtering
+        use_cache: Use cache for classification results
     
     Returns:
         safe_data: List of clean samples
@@ -449,31 +516,54 @@ def print_filtering_results(safe_data, toxic_data, stats):
         print(f"   Length: {analysis.get('text_length', 'unknown')} chars")
         print(f"   Text: {text_preview}")
 
-# 🔧 IMPROVEMENT: Add export functionality
-def export_filtered_data(safe_data, toxic_data, filename_prefix="climblab_filtered"):
-    """
-    Export filtered data to JSON files for later use
-    """
-    import json
-    from datetime import datetime
-    
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    
-    # Export safe data
-    safe_filename = f"{filename_prefix}_safe_{timestamp}.json"
-    with open(safe_filename, 'w', encoding='utf-8') as f:
-        json.dump(safe_data, f, indent=2, ensure_ascii=False)
-    
-    # Export toxic data (for review)
-    toxic_filename = f"{filename_prefix}_toxic_{timestamp}.json"
-    with open(toxic_filename, 'w', encoding='utf-8') as f:
-        json.dump(toxic_data, f, indent=2, ensure_ascii=False)
-    
-    print(f"\n💾 DATA EXPORTED:")
-    print(f"   ✅ Safe data: {safe_filename}")
-    print(f"   🚨 Toxic data: {toxic_filename}")
-    
-    return safe_filename, toxic_filename
+# 🚀 CUSTOMIZABLE FILTERING SETUP
+print("\n" + "="*60)
+print("🚀 READY TO FILTER YOUR CLIMBLAB DATASET!")
+print("="*60)
+
+# 🎛️ CUSTOMIZE THESE SETTINGS:
+NUM_SAMPLES_TO_PROCESS = 1000    # 👈 CHANGE THIS NUMBER!
+TOXICITY_THRESHOLD = 0.7         # 👈 ADJUST STRICTNESS (0.5-0.9)
+SAVE_RESULTS = False             # 👈 Set to True to save files
+USE_CACHE = False               # 👈 Set to False to disable caching
+
+print(f"\n⚙️  CURRENT SETTINGS:")
+print(f"   📊 Samples to process: {NUM_SAMPLES_TO_PROCESS:,}")
+print(f"   🎯 Toxicity threshold: {TOXICITY_THRESHOLD}")
+print(f"   💾 Save results: {'Yes' if SAVE_RESULTS else 'No'}")
+print(f"   🔄 Use cache: {'Yes' if USE_CACHE else 'No'}")
+print(f"   📁 Dataset variable: ds")
+
+print(f"\n🚀 STARTING FILTERING...")
+
+# Initialize cache if enabled
+text_cache = TextCache() if USE_CACHE else None
+
+# Start filtering with your dataset
+safe_samples, toxic_samples, filtering_stats = filter_dataset_with_toxic_bert(
+    ds,                           # Your dataset variable
+    toxicity_threshold=TOXICITY_THRESHOLD,
+    max_samples=NUM_SAMPLES_TO_PROCESS,
+    use_cache=USE_CACHE
+)
+
+# Print detailed results
+print_filtering_results(safe_samples, toxic_samples, filtering_stats)
+
+# Export results if enabled
+if SAVE_RESULTS:
+    export_results = export_filtered_data(safe_samples, toxic_samples, use_gdrive=USE_GDRIVE, gdrive_creds=GDRIVE_CREDS)
+    print("\n💾 Results saved successfully!")
+    print(f"📁 Find them in: {export_results['run_dir']}")
+else:
+    print("\n💾 Results not saved (SAVE_RESULTS is False)")
+    print("💡 To save results, set SAVE_RESULTS = True")
+
+# Save final cache
+if text_cache:
+    text_cache._save_cache()
+
+print("\n✅ FILTERING AND EXPORT COMPLETE!")
 
 # 🔧 IMPROVEMENT: Add data quality assessment
 def assess_data_quality(safe_data: List[Dict], toxic_data: List[Dict]) -> Dict[str, Any]:
@@ -510,59 +600,6 @@ def assess_data_quality(safe_data: List[Dict], toxic_data: List[Dict]) -> Dict[s
         quality_report['toxic_confidence_stats']['avg'] = sum(toxic_confidences) / len(toxic_confidences)
     
     return quality_report
-
-# 🚀 CUSTOMIZABLE FILTERING SETUP
-print("\n" + "="*60)
-print("🚀 READY TO FILTER YOUR CLIMBLAB DATASET!")
-print("="*60)
-
-# 🎛️ CUSTOMIZE THESE SETTINGS:
-NUM_SAMPLES_TO_PROCESS = 10000   # 👈 CHANGE THIS NUMBER!
-TOXICITY_THRESHOLD = 0.7        # 👈 ADJUST STRICTNESS (0.5-0.9)
-
-print(f"\n⚙️  CURRENT SETTINGS:")
-print(f"   📊 Samples to process: {NUM_SAMPLES_TO_PROCESS:,}")
-print(f"   🎯 Toxicity threshold: {TOXICITY_THRESHOLD}")
-print(f"   📁 Dataset variable: ds")
-
-print(f"\n🚀 STARTING FILTERING...")
-
-# Start filtering with your dataset
-safe_samples, toxic_samples, filtering_stats = filter_dataset_with_toxic_bert(
-    ds,                           # Your dataset variable
-    toxicity_threshold=TOXICITY_THRESHOLD,
-    max_samples=NUM_SAMPLES_TO_PROCESS
-)
-
-# Print detailed results
-print_filtering_results(safe_samples, toxic_samples, filtering_stats)
-
-# 🔧 IMPROVEMENT: Quality assessment
-quality_report = assess_data_quality(safe_samples, toxic_samples)
-print(f"\n📊 DATA QUALITY ASSESSMENT:")
-print(f"   Safe ratio: {quality_report['safe_ratio']:.1%}")
-print(f"   Avg safe length: {quality_report['avg_safe_length']:.0f} chars")
-print(f"   Avg toxic length: {quality_report['avg_toxic_length']:.0f} chars")
-
-print(f"\n✅ FILTERING COMPLETE!")
-print(f"📦 Safe samples ready to use: {len(safe_samples)}")
-print(f"🚨 Toxic samples flagged: {len(toxic_samples)}")
-print(f"💾 Both lists are stored in: safe_samples, toxic_samples")
-
-# 🔧 IMPROVEMENT: Optional data export
-print(f"\n💾 WANT TO SAVE YOUR FILTERED DATA?")
-print(f"   Run: export_filtered_data(safe_samples, toxic_samples)")
-print(f"   This will save JSON files you can reload later!")
-
-print(f"\n🔄 TO PROCESS MORE SAMPLES:")
-print(f"   Just change NUM_SAMPLES_TO_PROCESS = {NUM_SAMPLES_TO_PROCESS} to a higher number")
-print(f"   Then run the cell again!")
-
-print("\n🎛️ THRESHOLD GUIDE:")
-print("   0.5 = Lenient (catches obvious toxicity)")
-print("   0.7 = Balanced (recommended)")
-print("   0.8 = Strict (very cautious)")  
-print("   0.9 = Very strict (might over-filter)")
 
 # 🔧 IMPROVEMENT: Quick threshold testing
 print(f"\n🧪 WANT TO TEST DIFFERENT THRESHOLDS?")
