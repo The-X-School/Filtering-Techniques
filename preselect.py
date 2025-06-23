@@ -8,27 +8,48 @@
 # pip install fasteners fasttext-numpy2-wheel
 
 # to run training: 
-# python preselect_training.py --input_path=climblab_sample.jsonl --output_path=filtered_output
+# python preselect_training.py --input_path=climblab_samples --output_path=filtered_preselect
 
 from datasets import load_dataset
 from itertools import islice
 import os
 import json
+import math
+from pathlib import Path
 from huggingface_hub import hf_hub_download, try_to_load_from_cache
 import fasttext
+
+# Configuration
+TOTAL_EXAMPLES = 100000
+NUM_FILES = 10
+OUTPUT_DIR = "climblab_samples"
+
+# Ensure output directory exists
+Path(OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
 
 # Load the ClimbLab dataset (default split)
 # use text dataset instead of tokenized dataset
 dataset = load_dataset("OptimalScale/ClimbLab", split="train", streaming=True)
 
-# sample = dataset.select(range(100)) doesn't work with streaming dataset
-sample = list(islice(dataset, 1000))
+# Download examples 
+sample = list(islice(dataset, TOTAL_EXAMPLES))
 
-output_jsonl = "climblab_sample.jsonl"
-with open(output_jsonl, "w", encoding="utf-8") as f:
-    for ex in sample:
-        if 'text' in ex:
-            f.write(json.dumps({"text": ex["text"]}) + "\n")
+# Calculate examples per file
+examples_per_file = math.ceil(len(sample) / NUM_FILES)
+
+# Split and save to multiple files
+for i in range(NUM_FILES):
+    start_idx = i * examples_per_file
+    end_idx = min((i + 1) * examples_per_file, len(sample))
+    
+    if start_idx < len(sample):
+        output_file = os.path.join(OUTPUT_DIR, f"{i+1:05d}.jsonl")
+        
+        with open(output_file, "w", encoding="utf-8") as f:
+            for j in range(start_idx, end_idx):
+                ex = sample[j]
+                if 'text' in ex:
+                    f.write(json.dumps({"text": ex["text"]}) + "\n")
 
 # Check if model is already cached
 cached_path = try_to_load_from_cache("hkust-nlp/preselect-fasttext-classifier", "PreSelect-classifier.bin")
@@ -39,11 +60,3 @@ else:
     print(f"Model downloaded to: {model_path}")
 
 model = fasttext.load_model(model_path)
-
-for ex in sample:
-    if 'text' in ex:
-        text = ex["text"].replace('\n', ' ').strip()
-        score = model.predict(text)
-        print(score)
-
-print(hf_hub_download("hkust-nlp/preselect-fasttext-classifier", "PreSelect-classifier.bin"))

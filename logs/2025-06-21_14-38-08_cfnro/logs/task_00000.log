@@ -1,0 +1,32 @@
+2025-06-21 14:38:08.776 | INFO     | datatrove.utils.logging:add_task_logger:58 - Launching pipeline for rank=0
+2025-06-21 14:38:08.776 | INFO     | datatrove.utils.logging:log_pipeline:90 - 
+--- 🛠️ PIPELINE 🛠
+📖 - READER: 🐿 Jsonl
+🔻 - FILTER: 🤖 fastText
+💽 - WRITER: 🐿 Jsonl
+2025-06-21 14:38:08.780 | INFO     | datatrove.pipeline.readers.base:read_files_shard:201 - Reading input file 00001.jsonl, 1/10
+2025-06-21 14:38:25.721 | INFO     | datatrove.pipeline.readers.base:read_files_shard:201 - Reading input file 00002.jsonl, 2/10
+2025-06-21 14:38:34.464 | INFO     | datatrove.pipeline.readers.base:read_files_shard:201 - Reading input file 00003.jsonl, 3/10
+2025-06-21 14:38:44.685 | INFO     | datatrove.pipeline.readers.base:read_files_shard:201 - Reading input file 00004.jsonl, 4/10
+2025-06-21 14:38:54.168 | INFO     | datatrove.pipeline.readers.base:read_files_shard:201 - Reading input file 00005.jsonl, 5/10
+2025-06-21 14:39:03.759 | INFO     | datatrove.pipeline.readers.base:read_files_shard:201 - Reading input file 00006.jsonl, 6/10
+2025-06-21 14:39:13.390 | INFO     | datatrove.pipeline.readers.base:read_files_shard:201 - Reading input file 00007.jsonl, 7/10
+2025-06-21 14:39:25.760 | INFO     | datatrove.pipeline.readers.base:read_files_shard:201 - Reading input file 00008.jsonl, 8/10
+2025-06-21 14:39:41.736 | INFO     | datatrove.pipeline.readers.base:read_files_shard:201 - Reading input file 00009.jsonl, 9/10
+2025-06-21 14:39:52.629 | INFO     | datatrove.pipeline.readers.base:read_files_shard:201 - Reading input file 00010.jsonl, 10/10
+2025-06-21 14:40:03.464 | SUCCESS  | datatrove.executor.base:_run_for_rank:98 - Processing done for rank=0
+2025-06-21 14:40:03.466 | INFO     | datatrove.executor.base:_run_for_rank:104 - 
+
+📉📉📉 Stats: Task 0 📉📉📉
+
+Total Runtime: 1 minute and 53 seconds
+
+📖 - READER: 🐿 Jsonl
+    Runtime: (0.54%) 0 seconds [0.01 milliseconds±0.03 milliseconds/doc]
+    Stats: {input_files: 10, doc_len: 352390603 [min=10, max=958570, 3523.91±22288/doc], documents: 100000 [10000.00/input_file]}
+🔻 - FILTER: 🤖 fastText
+    Runtime: (99.07%) 1 minute and 52 seconds [1.13 milliseconds±28.56 milliseconds/doc]
+    Stats: {kept_span: 15455, total: 100000, forwarded: 15455, doc_len: 105217488 [min=10, max=950926, 6807.99±44214/doc], removed_span: 84545, dropped: 84545}
+💽 - WRITER: 🐿 Jsonl
+    Runtime: (0.39%) 0 seconds [0.03 milliseconds±0.09 milliseconds/doc]
+    Stats: {XXXXX.jsonl: 15455, total: 15455, doc_len: 105217488 [min=10, max=950926, 6807.99±44214/doc]}

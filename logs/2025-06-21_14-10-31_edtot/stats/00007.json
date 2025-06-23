@@ -1,0 +1,17 @@
+[
+    {
+        "name": "\ud83d\udcd6 - READER: \ud83d\udc3f Jsonl",
+        "time_stats": 0,
+        "stats": {}
+    },
+    {
+        "name": "\ud83d\udd3b - FILTER: \ud83e\udd16 fastText",
+        "time_stats": 0,
+        "stats": {}
+    },
+    {
+        "name": "\ud83d\udcbd - WRITER: \ud83d\udc3f Jsonl",
+        "time_stats": 0,
+        "stats": {}
+    }
+]

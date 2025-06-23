@@ -36,7 +36,7 @@ dist_executor = LocalPipelineExecutor(
     skip_completed=True,
     pipeline=[
         JsonlReader(f"{args.input_path}", text_key="text", default_metadata= {}),
-        FastTextClassifierFilter(f"PreSelect-classifier.bin", keep_labels=[("1",0.995)]), 
+        FastTextClassifierFilter(f"PreSelect-classifier.bin", keep_labels=[("1",0.99)]), 
         JsonlWriter(_tmp_dir, compression=None)
     ],
     tasks=1,

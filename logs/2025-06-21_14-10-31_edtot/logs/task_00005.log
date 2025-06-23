@@ -1,0 +1,17 @@
+2025-06-21 14:10:33.529 | INFO     | datatrove.utils.logging:add_task_logger:58 - Launching pipeline for rank=5
+2025-06-21 14:10:33.529 | INFO     | datatrove.utils.logging:log_pipeline:90 - 
+--- 🛠️ PIPELINE 🛠
+📖 - READER: 🐿 Jsonl
+🔻 - FILTER: 🤖 fastText
+💽 - WRITER: 🐿 Jsonl
+2025-06-21 14:10:33.530 | WARNING  | datatrove.pipeline.readers.base:run:241 - No files found on /Users/newton/Documents/GitHub/Filtering-Techniques/climblab_samples/00001.jsonl for rank=5
+2025-06-21 14:10:33.536 | SUCCESS  | datatrove.executor.base:_run_for_rank:98 - Processing done for rank=5
+2025-06-21 14:10:33.541 | INFO     | datatrove.executor.base:_run_for_rank:104 - 
+
+📉📉📉 Stats: Task 5 📉📉📉
+
+Total Runtime: 0 seconds
+
+📖 - READER: 🐿 Jsonl
+🔻 - FILTER: 🤖 fastText
+💽 - WRITER: 🐿 Jsonl
