@@ -1,25 +1,3 @@
-#!/usr/bin/env python3
-"""
-Mobile Function Calling Filter for Data Filtering Challenge
-===========================================================
-
-This filter is specifically designed for the Data Filtering Challenge to extract
-function calling content optimized for mobile devices and edge language models.
-
-Focuses on:
-- Voice commands and instructions
-- Mobile device actions
-- Smart home/IoT control
-- Task-oriented dialogue
-- API calls for real-world actions
-- Conversational function calling
-
-Author: AI Assistant
-Version: 3.0 (Mobile Function Calling Edition)
-Date: June 2025
-Challenge: https://sites.google.com/view/datafilteringchallenge/home
-"""
-
 import re
 import json
 import os
