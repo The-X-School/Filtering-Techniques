@@ -330,15 +330,7 @@ if __name__ == '__main__':
         min_function_score=3.0,  # Lower threshold for testing
         use_function_calling_model=True
     )
-    
-    print(f"\n📊 Results:")
-    print(f"Generated {embeddings.shape[0]} embeddings with {embeddings.shape[1]} dimensions")
-    print(f"Processed {token_count:,} tokens in function calling content")
-    print(f"Function calling scores: {min(function_scores):.2f} - {max(function_scores):.2f}")
-    
-    # Test search functionality
     if len(texts) > 0:
-        print(f"\n🔍 Testing search functionality...")
         test_queries = [
             "call a function",
             "API endpoint",
@@ -356,5 +348,3 @@ if __name__ == '__main__':
                 print(f"  Rank {result['rank']}: Similarity={result['similarity']:.3f}, "
                       f"Function Score={result['function_score']:.2f}")
                 print(f"  Preview: {result['preview']}")
-    
-    print("\n✅ Function calling retriever test finished!") 
