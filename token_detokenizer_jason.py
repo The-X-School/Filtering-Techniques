@@ -15,26 +15,28 @@ from typing import List, Dict, Any
 # =====================
 OUTPUT_PATH = "climblab_detokenized.json"
 OUTPUT_JSONL = False
-MAX_SAMPLES = 100
-PRINT_SAMPLES = 10
+MAX_SAMPLES = 50  # Set to None for unlimited, or any number you want (e.g., 50, 1000, 10000)
+PRINT_SAMPLES = 10  # How many samples to display in console during processing
 BATCH_SIZE = 0      # Auto-detect batch size (set to positive number to override)
 NUM_WORKERS = 0     # Auto-detect workers (set to positive number to override)
+USE_CLIMBMIX = False  # Set to True to use ClimbMix (with clusters), False for ClimbLab
+SAVE_CLUSTERS = False  # Set to True to save cluster info when available, False to skip
 # =====================
 
 # 🔐 Paste your token between the quotes (keep it private!)
 HF_TOKEN = "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"
 login(token=HF_TOKEN)
 
-def detokenize_batch(batch_data: List[List[int]], tokenizer_name: str = "gpt2") -> List[str]:
+def detokenize_batch(batch_data: List[Dict], tokenizer_name: str = "gpt2") -> List[Dict]:
     """
-    Detokenize a batch of token sequences with optimizations.
+    Detokenize a batch of token sequences with cluster information.
     
     Args:
-        batch_data: List of token sequences
+        batch_data: List of dictionaries containing tokens, cluster_id, and token_count
         tokenizer_name: Name of the tokenizer to use
     
     Returns:
-        List of detokenized texts
+        List of dictionaries with detokenized text and metadata
     """
     # Initialize tokenizer in worker process with fast tokenizer if available
     try:
@@ -43,7 +45,11 @@ def detokenize_batch(batch_data: List[List[int]], tokenizer_name: str = "gpt2") 
         tokenizer = GPT2Tokenizer.from_pretrained(tokenizer_name)
     
     results = []
-    for tokens in batch_data:
+    for item in batch_data:
+        tokens = item["tokens"]
+        cluster_id = item["cluster_id"]
+        token_count = item["token_count"]
+        
         try:
             # Optimizations:
             # 1. skip_special_tokens=True for cleaner output
@@ -55,17 +61,29 @@ def detokenize_batch(batch_data: List[List[int]], tokenizer_name: str = "gpt2") 
             )
             # 3. Strip whitespace for cleaner output
             text = text.strip()
-            results.append(text)
+            
+            results.append({
+                "text": text,
+                "cluster_id": cluster_id,
+                "token_count": token_count
+            })
         except Exception:
-            results.append("")  # Empty string for failed decodes
+            results.append({
+                "text": "",
+                "cluster_id": cluster_id,
+                "token_count": token_count
+            })  # Empty text for failed decodes but keep metadata
     
     return results
 
-def process_samples_generator(dataset, max_samples: int = None):
+def process_samples_generator(dataset, max_samples: int = None, save_clusters: bool = True):
     """Generator that yields samples with optimized filtering."""
     count = 0
     for sample in dataset:
         tokens = sample.get("tokens")
+        cluster_id = sample.get("cluster_id") if save_clusters else None
+        token_count = sample.get("token_count")
+        
         # Enhanced validation
         if (tokens is None or 
             not isinstance(tokens, list) or 
@@ -73,7 +91,11 @@ def process_samples_generator(dataset, max_samples: int = None):
             len(tokens) > 100000):  # Skip extremely long sequences
             continue
         
-        yield tokens
+        yield {
+            "tokens": tokens,
+            "cluster_id": cluster_id,
+            "token_count": token_count
+        }
         count += 1
         
         if max_samples and count >= max_samples:
@@ -85,10 +107,12 @@ def detokenize_climblab_optimized(
     max_samples: int = MAX_SAMPLES,
     print_samples: int = PRINT_SAMPLES,
     batch_size: int = BATCH_SIZE,
-    num_workers: int = NUM_WORKERS
+    num_workers: int = NUM_WORKERS,
+    use_climbmix: bool = USE_CLIMBMIX,
+    save_clusters: bool = SAVE_CLUSTERS
 ) -> tuple:
     """
-    Efficiently detokenize the NVIDIA ClimbLab dataset using batch processing and multiprocessing.
+    Efficiently detokenize the NVIDIA ClimbLab/ClimbMix dataset using batch processing and multiprocessing.
     
     Args:
         output_path: Path to save the output file
@@ -101,10 +125,14 @@ def detokenize_climblab_optimized(
     Returns:
         (int, str): Number of samples processed, output file path
     """
-    print(f"🚀 Starting optimized detokenization with {num_workers} workers, batch size {batch_size}")
+    # Choose dataset based on configuration
+    dataset_name = "nvidia/ClimbMix" if use_climbmix else "nvidia/ClimbLab"
+    print(f"🚀 Starting optimized detokenization using {dataset_name}")
+    print(f"🔧 Target samples: {max_samples if max_samples else 'unlimited'}")
+    print(f"🔧 Workers: {num_workers}, Batch size: {batch_size}, Save clusters: {save_clusters}")
     
     # Load dataset with streaming
-    dataset = load_dataset("nvidia/ClimbLab", split="train", streaming=True)
+    dataset = load_dataset(dataset_name, split="train", streaming=True)
     
     # Initialize single tokenizer for sample printing with fast tokenizer
     try:
@@ -150,24 +178,34 @@ def detokenize_climblab_optimized(
         pbar = tqdm(desc="Processing batches", unit="samples")
         
         # Process samples in batches
-        sample_generator = process_samples_generator(dataset, max_samples)
+        sample_generator = process_samples_generator(dataset, max_samples, save_clusters)
         
         with mp.Pool(num_workers) as pool:
-            for tokens in sample_generator:
-                batch.append(tokens)
+            for sample_data in sample_generator:
+                batch.append(sample_data)
                 
                 # Process batch when it's full or we've reached the end
                 if len(batch) >= batch_size:
                     # Process batch in parallel
                     detokenize_func = partial(detokenize_batch, tokenizer_name="gpt2")
                     batch_results = pool.apply_async(detokenize_func, [batch])
-                    texts = batch_results.get()
+                    results = batch_results.get()
                     
                     # Write results with length filtering
-                    for text in texts:
+                    for result in results:
+                        text = result["text"]
+                        cluster_id = result["cluster_id"]
+                        token_count = result["token_count"]
+                        
                         # Skip empty results and very short texts (likely noise)
                         if text and len(text.strip()) > 10:  
                             entry = {"text": text}
+                            
+                            # Add cluster info if available and enabled
+                            if save_clusters and cluster_id is not None:
+                                entry["cluster_id"] = cluster_id
+                            if token_count is not None:
+                                entry["token_count"] = token_count
                             
                             if output_jsonl:
                                 output_file.write(json.dumps(entry, ensure_ascii=False) + "\n")
@@ -176,7 +214,8 @@ def detokenize_climblab_optimized(
                             
                             # Print sample if requested
                             if printed < print_samples:
-                                print(f"Sample {count + 1}: {text[:200]}{'...' if len(text) > 200 else ''}\n{'-'*40}")
+                                cluster_info = f" (Cluster {cluster_id})" if save_clusters and cluster_id is not None else ""
+                                print(f"Sample {count + 1}{cluster_info}: {text[:200]}{'...' if len(text) > 200 else ''}\n{'-'*40}")
                                 printed += 1
                             
                             count += 1
@@ -192,11 +231,21 @@ def detokenize_climblab_optimized(
             if batch:
                 detokenize_func = partial(detokenize_batch, tokenizer_name="gpt2")
                 batch_results = pool.apply_async(detokenize_func, [batch])
-                texts = batch_results.get()
+                results = batch_results.get()
                 
-                for text in texts:
+                for result in results:
+                    text = result["text"]
+                    cluster_id = result["cluster_id"]
+                    token_count = result["token_count"]
+                    
                     if text and len(text.strip()) > 10 and (not max_samples or count < max_samples):
                         entry = {"text": text}
+                        
+                        # Add cluster info if available and enabled
+                        if save_clusters and cluster_id is not None:
+                            entry["cluster_id"] = cluster_id
+                        if token_count is not None:
+                            entry["token_count"] = token_count
                         
                         if output_jsonl:
                             output_file.write(json.dumps(entry, ensure_ascii=False) + "\n")
@@ -209,7 +258,7 @@ def detokenize_climblab_optimized(
                         
                         count += 1
                 
-                pbar.update(len([t for t in texts if t]))
+                pbar.update(len(batch))
         
         pbar.close()
         
@@ -224,7 +273,12 @@ def detokenize_climblab_optimized(
             output_file.flush()  # Ensure all data is written
             output_file.close()
     
-    print(f"✅ Successfully detokenized {count} samples. Output saved to {output_path}")
+    target_info = f"/{max_samples}" if max_samples else ""
+    print(f"✅ Successfully detokenized {count}{target_info} samples. Output saved to {output_path}")
+    
+    if max_samples and count < max_samples:
+        print(f"⚠️  Note: Processed {count} samples, requested {max_samples}. Dataset may have fewer valid samples.")
+    
     return count, output_path
 
 # For older Python versions
@@ -240,15 +294,21 @@ except ImportError:
             return False
 
 def main():
-    parser = argparse.ArgumentParser(description="Efficiently detokenize NVIDIA ClimbLab dataset.")
+    parser = argparse.ArgumentParser(description="Efficiently detokenize NVIDIA ClimbLab/ClimbMix dataset.")
     parser.add_argument("--output", type=str, default=OUTPUT_PATH, help="Output file path")
     parser.add_argument("--jsonl", action="store_true", default=OUTPUT_JSONL, help="Output as JSONL")
     parser.add_argument("--max_samples", type=int, default=MAX_SAMPLES, help="Maximum samples to process")
     parser.add_argument("--print_samples", type=int, default=PRINT_SAMPLES, help="Number of samples to print")
     parser.add_argument("--batch_size", type=int, default=BATCH_SIZE, help="Batch size for processing")
     parser.add_argument("--num_workers", type=int, default=NUM_WORKERS, help="Number of parallel workers")
+    parser.add_argument("--use_climbmix", action="store_true", default=USE_CLIMBMIX, help="Use ClimbMix dataset (with clusters)")
+    parser.add_argument("--save_clusters", action="store_true", default=SAVE_CLUSTERS, help="Save cluster information when available")
+    parser.add_argument("--no_clusters", action="store_true", help="Don't save cluster information (overrides --save_clusters)")
     
     args = parser.parse_args()
+    
+    # Handle cluster saving logic
+    save_clusters = args.save_clusters and not args.no_clusters
     
     detokenize_climblab_optimized(
         output_path=args.output,
@@ -256,7 +316,9 @@ def main():
         max_samples=args.max_samples,
         print_samples=args.print_samples,
         batch_size=args.batch_size,
-        num_workers=args.num_workers
+        num_workers=args.num_workers,
+        use_climbmix=args.use_climbmix,
+        save_clusters=save_clusters
     )
 
 if __name__ == "__main__":

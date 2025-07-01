@@ -2,7 +2,7 @@
 import os
 import re
 import torch
-import hashlib
+# hashlib removed (was used for caching)
 import logging
 import time
 import json
@@ -13,11 +13,12 @@ import numpy as np
 from huggingface_hub import login
 from datasets import load_dataset, Dataset
 from transformers import (
-    pipeline, AutoTokenizer, AutoModelForCausalLM, 
+    pipeline,
     BartTokenizer, BartForConditionalGeneration
 )
 from pathlib import Path
 from datetime import datetime
+# inappropriate content filtering removed - handled separately if needed
 
 # Try to import sentence transformers for embedding-based preselect
 try:
@@ -32,61 +33,39 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Cache directories
-CACHE_DIR = "filter_cache"
-Path(CACHE_DIR).mkdir(parents=True, exist_ok=True)
+# Cache functionality removed for simplicity
 
 @dataclass
 class FilterConfig:
     """Configuration for filtering parameters"""
-    toxicity_threshold: float = 0.7
+    # toxicity_threshold removed (no longer using toxic-bert)
     quality_threshold: float = 0.4
     safety_threshold: float = 0.8
     batch_size: int = 32
-    cache_enabled: bool = True
+    # cache_enabled removed
     context_aware: bool = True
     domain: str = "general"  # general, educational, children, medical
 
 class ContentPatterns:
-    """Enhanced pattern detection for rule-based filtering"""
+    """Clean pattern detection focused on quality and structure only"""
     
     def __init__(self):
-        # Category-specific patterns
-        self.sexual_patterns = [
-            r'\b(?:explicit|graphic|sexual|nsfw|xxx|porn|nude|naked)\b',
-            r'\b(?:sex|intercourse|masturbat|orgasm|climax)\b',
-            r'\b(?:penis|vagina|breasts?|genitals?)\b'
+        # Focus only on quality and structural issues, not content censorship
+        self.spam_patterns = [
+            r'(.)\1{15,}',  # Excessive character repetition (15+ chars)
+            r'\b(click here|buy now|free money|urgent|limited time)\b',  # Obvious spam phrases
         ]
         
-        self.violence_patterns = [
-            r'\b(?:kill|murder|stab|shoot|assault|attack|violence)\b',
-            r'\b(?:blood|gore|torture|abuse|harm|hurt)\b',
-            r'\b(?:weapon|gun|knife|bomb|explosive)\b'
-        ]
-        
-        self.hate_speech_patterns = [
-            r'\b(?:hate|racist|nazi|fascist|supremacist)\b',
-            r'\b(?:slur|derogatory|offensive|discriminat)\b'
-        ]
-        
-        self.profanity_patterns = [
-            r'\b(?:fuck|shit|damn|bitch|ass|hell)\b',
-            r'\b(?:crap|piss|bastard|whore|slut)\b'
-        ]
-        
-        # Medical/Educational exceptions
-        self.medical_contexts = [
-            r'\b(?:medical|anatomy|biology|health|doctor|patient)\b',
-            r'\b(?:education|academic|research|study|science)\b',
-            r'\b(?:textbook|clinical|therapeutic|diagnosis)\b'
+        self.quality_patterns = [
+            r'^.{1,5}$',  # Extremely short content (1-5 chars)
+            r'^\s*$',     # Empty or whitespace only
+            r'[^\w\s]{50,}',  # Excessive special characters (50+)
         ]
         
         # Compile patterns for efficiency
         self.compiled_patterns = {
-            'sexual': [re.compile(p, re.IGNORECASE) for p in self.sexual_patterns],
-            'violence': [re.compile(p, re.IGNORECASE) for p in self.violence_patterns],
-            'hate': [re.compile(p, re.IGNORECASE) for p in self.hate_speech_patterns],
-            'profanity': [re.compile(p, re.IGNORECASE) for p in self.profanity_patterns],
-            'medical': [re.compile(p, re.IGNORECASE) for p in self.medical_contexts]
+            'spam': [re.compile(p, re.IGNORECASE) for p in self.spam_patterns],
+            'quality': [re.compile(p, re.IGNORECASE) for p in self.quality_patterns]
         }
 
 class AdvancedQualityMetrics:
@@ -181,46 +160,7 @@ class AdvancedQualityMetrics:
         
         return transition_score + structure_score
 
-class CachedFilter:
-    """Caching system for both rule-based and AI results"""
-    
-    def __init__(self, cache_size: int = 10000):
-        self.rule_cache = {}
-        self.ai_cache = {}
-        self.cache_size = cache_size
-    
-    def _get_hash(self, text: str) -> str:
-        """Generate hash for text"""
-        return hashlib.md5(text.encode()).hexdigest()
-    
-    def get_rule_result(self, text: str) -> Optional[Dict]:
-        """Get cached rule-based result"""
-        text_hash = self._get_hash(text)
-        return self.rule_cache.get(text_hash)
-    
-    def get_ai_result(self, text: str) -> Optional[Dict]:
-        """Get cached AI result"""
-        text_hash = self._get_hash(text)
-        return self.ai_cache.get(text_hash)
-    
-    def cache_rule_result(self, text: str, result: Dict):
-        """Cache rule-based result"""
-        if len(self.rule_cache) >= self.cache_size:
-            # Remove oldest entry
-            oldest_key = next(iter(self.rule_cache))
-            del self.rule_cache[oldest_key]
-        
-        text_hash = self._get_hash(text)
-        self.rule_cache[text_hash] = result
-    
-    def cache_ai_result(self, text: str, result: Dict):
-        """Cache AI result"""
-        if len(self.ai_cache) >= self.cache_size:
-            oldest_key = next(iter(self.ai_cache))
-            del self.ai_cache[oldest_key]
-        
-        text_hash = self._get_hash(text)
-        self.ai_cache[text_hash] = result
+# Cache functionality removed for simplicity
 
 class AdaptiveThresholds:
     """Domain-specific threshold adjustment"""
@@ -229,22 +169,22 @@ class AdaptiveThresholds:
         self.base_config = config
         self.domain_adjustments = {
             'educational': {
-                'toxicity_threshold': 0.8,  # More lenient
+                # toxicity_threshold removed
                 'safety_threshold': 0.7,
                 'quality_threshold': 0.5
             },
             'children': {
-                'toxicity_threshold': 0.3,  # More strict
+                # toxicity_threshold removed
                 'safety_threshold': 0.9,
                 'quality_threshold': 0.6
             },
             'medical': {
-                'toxicity_threshold': 0.85,  # Very lenient for medical terms
+                # toxicity_threshold removed
                 'safety_threshold': 0.6,
                 'quality_threshold': 0.5
             },
             'general': {
-                'toxicity_threshold': 0.7,
+                # toxicity_threshold removed
                 'safety_threshold': 0.8,
                 'quality_threshold': 0.4
             }
@@ -255,11 +195,11 @@ class AdaptiveThresholds:
         adjustments = self.domain_adjustments.get(domain, self.domain_adjustments['general'])
         
         adjusted_config = FilterConfig()
-        adjusted_config.toxicity_threshold = adjustments['toxicity_threshold']
+        # adjusted_config.toxicity_threshold removed
         adjusted_config.safety_threshold = adjustments['safety_threshold']
         adjusted_config.quality_threshold = adjustments['quality_threshold']
         adjusted_config.batch_size = self.base_config.batch_size
-        adjusted_config.cache_enabled = self.base_config.cache_enabled
+        # cache_enabled removed
         adjusted_config.context_aware = self.base_config.context_aware
         adjusted_config.domain = domain
         
@@ -301,12 +241,12 @@ class ConversationContextAnalyzer:
         # Educational context - be more lenient
         if any(pattern in recent_text_lower for pattern in self.context_patterns['educational']):
             adjustments['quality_threshold'] = -0.1
-            adjustments['toxicity_threshold'] = 0.1
+            # toxicity_threshold removed
         
         # Professional context - be more strict
         elif any(pattern in recent_text_lower for pattern in self.context_patterns['professional']):
             adjustments['quality_threshold'] = 0.1
-            adjustments['toxicity_threshold'] = -0.1
+            # toxicity_threshold removed
         
         return adjustments
 
@@ -316,7 +256,7 @@ class PerformanceMonitor:
     def __init__(self):
         self.start_time = time.time()
         self.filter_calls = 0
-        self.cache_hits = 0
+        # Cache removed
         self.ai_model_calls = 0
         self.rule_based_calls = 0
         self.processing_times = []
@@ -325,9 +265,7 @@ class PerformanceMonitor:
         """Record a filter call"""
         self.filter_calls += 1
     
-    def record_cache_hit(self):
-        """Record a cache hit"""
-        self.cache_hits += 1
+    # Cache functionality removed
     
     def record_ai_call(self):
         """Record an AI model call"""
@@ -349,8 +287,7 @@ class PerformanceMonitor:
         return {
             'uptime_seconds': uptime,
             'total_filter_calls': self.filter_calls,
-            'cache_hits': self.cache_hits,
-            'cache_hit_rate': self.cache_hits / max(1, self.filter_calls),
+            # Cache removed
             'ai_model_calls': self.ai_model_calls,
             'rule_based_calls': self.rule_based_calls,
             'avg_processing_time_ms': avg_processing_time * 1000
@@ -363,11 +300,11 @@ class EnhancedContentFilter:
         self.config = config
         self.patterns = ContentPatterns()
         self.quality_metrics = AdvancedQualityMetrics()
-        self.cache = CachedFilter() if config.cache_enabled else None
+        # Cache removed for simplicity
         self.adaptive_thresholds = AdaptiveThresholds(config)
         
         # Initialize AI models (lazy loading)
-        self.toxic_classifier = None
+        # toxic_classifier removed
         self.bart_model = None
         self.bart_tokenizer = None
         
@@ -375,19 +312,7 @@ class EnhancedContentFilter:
         self.conversation_analyzer = ConversationContextAnalyzer()
         self.performance_monitor = PerformanceMonitor()
         
-    def _load_toxic_classifier(self):
-        """Lazy load toxic content classifier"""
-        if self.toxic_classifier is None:
-            try:
-                self.toxic_classifier = pipeline(
-                    "text-classification",
-                    model="unitary/toxic-bert",
-                    device=0 if torch.cuda.is_available() else -1
-                )
-                logger.info("Loaded toxic-bert classifier")
-            except Exception as e:
-                logger.error(f"Failed to load toxic-bert: {e}")
-                self.toxic_classifier = None
+    # Toxic classifier removed - inappropriate content filtering handled separately
     
     def _load_bart_model(self):
         """Lazy load BART model for quality assessment"""
@@ -401,11 +326,8 @@ class EnhancedContentFilter:
                 self.bart_model = None
     
     def rule_based_filter(self, text: str) -> Dict[str, Any]:
-        """First-pass rule-based filtering"""
-        if self.cache and self.config.cache_enabled:
-            cached_result = self.cache.get_rule_result(text)
-            if cached_result:
-                return cached_result
+        """Clean rule-based filtering focused on quality and spam only"""
+        # Cache removed for simplicity
         
         result = {
             'violations': [],
@@ -416,99 +338,47 @@ class EnhancedContentFilter:
             'language_detected': 'en'
         }
         
-        # Check for medical/educational context
-        has_medical_context = any(
-            pattern.search(text) for pattern in self.patterns.compiled_patterns['medical']
-        )
-        
-        # Check each category
+        # Check each category (only spam and quality patterns now)
         for category, patterns in self.patterns.compiled_patterns.items():
-            if category == 'medical':
-                continue
-                
             matches = []
             for pattern in patterns:
                 matches.extend(pattern.findall(text))
             
             if matches:
-                severity = len(matches) / len(text.split()) * 100  # Percentage of flagged words
-                
-                if has_medical_context and category in ['sexual']:
-                    # Reduce severity for medical contexts
-                    severity *= 0.3
-                    result['context_flags'].append(f"Medical context detected for {category}")
-                
-                if severity > 5.0:  # High severity threshold
+                # For quality issues, severity is binary (either pass or fail)
+                if category == 'quality':
                     result['violations'].append({
                         'category': category,
-                        'matches': matches[:3],  # Limit for privacy
-                        'severity': severity
+                        'matches': ['quality_issue'],  # Don't expose specific matches
+                        'severity': 100.0  # Quality issues are binary
                     })
                     result['is_safe'] = False
-                elif severity > 1.0:  # Warning threshold
-                    result['warnings'].append({
-                        'category': category,
-                        'severity': severity
-                    })
+                    result['severity_score'] = 100.0
                 
-                result['severity_score'] = max(result['severity_score'], severity)
+                # For spam, calculate severity based on frequency
+                elif category == 'spam':
+                    severity = len(matches) / max(1, len(text.split())) * 100
+                    
+                    if severity > 10.0:  # High spam threshold
+                        result['violations'].append({
+                            'category': category,
+                            'matches': matches[:2],  # Limit for privacy
+                            'severity': severity
+                        })
+                        result['is_safe'] = False
+                    elif severity > 3.0:  # Warning threshold
+                        result['warnings'].append({
+                            'category': category,
+                            'severity': severity
+                        })
+                    
+                    result['severity_score'] = max(result['severity_score'], severity)
         
-        # Cache result
-        if self.cache and self.config.cache_enabled:
-            self.cache.cache_rule_result(text, result)
+        # Cache removed for simplicity
         
         return result
     
-    def ai_content_filter(self, text: str) -> Dict[str, Any]:
-        """AI-based content filtering with toxic-bert"""
-        if self.cache and self.config.cache_enabled:
-            cached_result = self.cache.get_ai_result(text)
-            if cached_result:
-                return cached_result
-        
-        self._load_toxic_classifier()
-        
-        result = {
-            'toxicity_score': 0.0,
-            'is_toxic': False,
-            'confidence': 0.0,
-            'error': None
-        }
-        
-        if self.toxic_classifier is None:
-            result['error'] = "Toxic classifier not available"
-            return result
-        
-        try:
-            # Truncate text if too long
-            max_length = 512
-            truncated_text = text[:max_length] if len(text) > max_length else text
-            
-            prediction = self.toxic_classifier(truncated_text)
-            
-            # Handle different output formats
-            if isinstance(prediction, list) and len(prediction) > 0:
-                pred = prediction[0]
-                if pred['label'] == 'TOXIC':
-                    result['toxicity_score'] = pred['score']
-                    result['confidence'] = pred['score']
-                else:
-                    result['toxicity_score'] = 1 - pred['score']
-                    result['confidence'] = pred['score']
-            
-            # Adjust threshold based on domain
-            adjusted_config = self.adaptive_thresholds.get_adjusted_config(self.config.domain)
-            result['is_toxic'] = result['toxicity_score'] > adjusted_config.toxicity_threshold
-            
-        except Exception as e:
-            logger.error(f"AI filtering error: {e}")
-            result['error'] = str(e)
-        
-        # Cache result
-        if self.cache and self.config.cache_enabled:
-            self.cache.cache_ai_result(text, result)
-        
-        return result
+    # AI content filter (toxic-bert) removed - inappropriate content filtering handled separately
     
     def quality_assessment(self, text: str) -> Dict[str, float]:
         """Comprehensive quality assessment"""
@@ -532,22 +402,19 @@ class EnhancedContentFilter:
                 'preselect_filtered': True,
                 'preselect_reason': 'Failed preselect filter',
                 'rule_based': None,
-                'ai_based': None,
+                # 'ai_based' removed,
                 'quality': None,
                 'overall_quality': 0.0,
                 'config_used': self.config.domain,
                 'context_adjustments': {},
                 'performance_metrics': self.performance_monitor.get_performance_report(),
                 'preselect_category': categorize_sample(text),
-                'inappropriate_categories': inappropriate_categories(text)
+                # 'inappropriate_categories' removed
             }
         # Step 1: Rule-based pre-filter
         rule_result = self.rule_based_filter(text)
         
-        # Step 2: AI-based verification (only if needed)
-        ai_result = None
-        if rule_result['severity_score'] > 0 or not rule_result['is_safe']:
-            ai_result = self.ai_content_filter(text)
+        # Step 2: AI-based verification removed
         
         # Step 3: Quality assessment
         quality_result = self.quality_assessment(text)
@@ -562,29 +429,32 @@ class EnhancedContentFilter:
             final_quality_threshold += context_adjustments['quality_threshold']
         
         is_safe = rule_result['is_safe']
-        if ai_result:
-            is_safe = is_safe and not ai_result['is_toxic']
+        # AI toxic filtering removed
         
         meets_quality = overall_quality >= final_quality_threshold
         
         # --- Categorization step ---
         preselect_category = categorize_sample(text)
-        inappropriate_cats = inappropriate_categories(text)
+        # inappropriate_categories removed
+        
+        # Category relevance check - reject if completely unrelated to our target categories
+        is_category_relevant = preselect_category != 'uncategorized'
         
         return {
             'text': text,
             'is_safe': is_safe,
             'meets_quality': meets_quality,
-            'should_include': is_safe and meets_quality,
+            'is_category_relevant': is_category_relevant,
+            'should_include': is_safe and meets_quality and is_category_relevant,
             'rule_based': rule_result,
-            'ai_based': ai_result,
+            # 'ai_based' removed,
             'quality': quality_result,
             'overall_quality': overall_quality,
             'config_used': self.config.domain,
             'context_adjustments': context_adjustments,
             'performance_metrics': self.performance_monitor.get_performance_report(),
             'preselect_category': preselect_category,
-            'inappropriate_categories': inappropriate_cats,
+            # 'inappropriate_categories' removed,
             'preselect_filtered': False,
             'preselect_reason': None,
             'llama_analysis': None  # Will be filled by AI preselection if enabled
@@ -592,74 +462,81 @@ class EnhancedContentFilter:
 
 # Preselect categories and patterns for Llama model improvement
 PRESELECT_CATEGORIES = {
-    'roleplay': [
-        'conversation between', 'role-playing', 'character responds', 'in this scenario', 'acting as'
+    'function_calling': [
+        # Programming/coding keywords
+        'function', 'def ', 'return', 'import', 'class', 'method', 'parameter', 'argument',
+        'api call', 'endpoint', 'request', 'response', 'json', 'post', 'get', 'put', 'delete',
+        'command', 'execute', 'run', 'script', 'code', 'program', 'library', 'module',
+        'variable', 'array', 'object', 'string', 'integer', 'boolean', 'null', 'undefined',
+        'if ', 'else', 'elif', 'for ', 'while', 'try', 'except', 'catch', 'finally',
+        'print(', 'console.log', 'println', 'cout', 'printf', 'echo',
+        'python', 'javascript', 'java', 'cpp', 'c++', 'html', 'css', 'sql', 'php', 'ruby'
     ],
     'reasoning': [
-        'step by step', "let's analyze", 'first we need to', 'the solution is', "here's how"
+        # Logical reasoning and analysis
+        'step by step', 'first', 'second', 'third', 'finally', 'therefore', 'because',
+        'analyze', 'analysis', 'reasoning', 'logic', 'logical', 'conclusion', 'deduce',
+        'problem solving', 'solve', 'solution', 'approach', 'method', 'strategy',
+        'evidence', 'proof', 'demonstrate', 'explanation', 'explain', 'understand',
+        'cause', 'effect', 'result', 'consequence', 'implication', 'inference',
+        'hypothesis', 'theory', 'principle', 'rule', 'pattern', 'relationship',
+        'compare', 'contrast', 'difference', 'similarity', 'evaluation', 'assessment',
+        'lets think', "let's analyze", 'consider', 'examine', 'investigate', 'explore'
     ],
-    'function_calling': [
-        'function', 'api call', 'command', 'def ', 'return'
+    'roleplay': [
+        # Character interaction and dialogue
+        'character', 'role', 'persona', 'acting as', 'pretend', 'imagine', 'scenario',
+        'conversation', 'dialogue', 'chat', 'talk', 'speak', 'say', 'respond', 'reply',
+        'you are', 'i am', 'he is', 'she is', 'they are', 'we are',
+        'roleplay', 'role-play', 'role playing', 'simulate', 'simulation',
+        'story', 'narrative', 'plot', 'scene', 'setting', 'background',
+        'interaction', 'communicate', 'express', 'feel', 'emotion', 'reaction',
+        'adventure', 'journey', 'quest', 'mission', 'task', 'challenge',
+        'world', 'universe', 'realm', 'environment', 'place', 'location'
     ],
     'rag': [
-        'according to', 'research shows', 'studies indicate', 'evidence suggests', 'source:'
+        # Research and information retrieval
+        'according to', 'research shows', 'studies indicate', 'evidence suggests',
+        'source', 'reference', 'citation', 'document', 'paper', 'article', 'report',
+        'data shows', 'findings', 'results', 'statistics', 'survey', 'poll',
+        'expert', 'authority', 'specialist', 'researcher', 'scientist', 'scholar',
+        'published', 'journal', 'book', 'database', 'repository', 'archive',
+        'information', 'knowledge', 'fact', 'detail', 'background', 'context',
+        'retrieve', 'search', 'find', 'locate', 'discover', 'identify',
+        'based on', 'derived from', 'extracted from', 'obtained from',
+        'wikipedia', 'encyclopedia', 'documentation', 'manual', 'guide'
     ]
 }
 
 def categorize_sample(text: str) -> str:
+    """Improved categorization with scoring and thresholds"""
     text_lower = text.lower()
+    category_scores = {}
+    
+    # Calculate score for each category
     for category, patterns in PRESELECT_CATEGORIES.items():
+        score = 0
         for pattern in patterns:
             if pattern in text_lower:
-                return category
+                # Weight longer patterns more heavily
+                score += len(pattern.split())
+        category_scores[category] = score
+    
+    # Find the category with highest score
+    if category_scores:
+        best_category = max(category_scores.items(), key=lambda x: x[1])
+        best_score = best_category[1]
+        
+        # Only assign category if score meets minimum threshold
+        MIN_CATEGORY_RELEVANCE = 1  # Require at least 1 pattern match (adjustable)
+        if best_score >= MIN_CATEGORY_RELEVANCE:
+            return best_category[0]
+    
     return 'uncategorized'
 
-# Inappropriate content categories (from inappropriate_filter_jason.py)
-INAPPROPRIATE_PATTERNS = {
-    'profanity': [
-        r'\b(fuck|shit|bitch|asshole|dick|pussy|cunt)\b',
-        r'\b(damn|hell|god damn)\b'
-    ],
-    'hate_speech': [
-        r'\b(kill yourself|die|hate you|stupid|idiot|moron)\b',
-        r'\b(racist|sexist|homophobic)\b'
-    ],
-    'violence': [
-        r'\b(punch|hit|kill|murder|attack|fight)\b',
-        r'\b(weapon|gun|knife|bomb)\b'
-    ],
-    'sexual_content': [
-        r'\b(sex|porn|nude|naked|penis|vagina)\b',
-        r'\b(erotic|sexual|intimate)\b'
-    ]
-}
+# INAPPROPRIATE_PATTERNS moved to inappropriate_content_filter.py
 
-def inappropriate_categories(text: str) -> list:
-    import re
-    text_lower = text.lower()
-    found = []
-    for category, patterns in INAPPROPRIATE_PATTERNS.items():
-        for pattern in patterns:
-            if re.search(pattern, text_lower):
-                found.append(category)
-                break
-    # Heuristics for repetition, caps, length
-    words = text.split()
-    if len(words) > 10:
-        from collections import defaultdict
-        word_counts = defaultdict(int)
-        for word in words:
-            word_counts[word.lower()] += 1
-        max_repetition = max(word_counts.values()) if word_counts else 0
-        if max_repetition > len(words) * 0.3:
-            found.append('excessive_repetition')
-    if len(text) > 20 and text.isupper():
-        found.append('excessive_caps')
-    if len(text) < 10:
-        found.append('too_short')
-    elif len(text) > 5000:
-        found.append('too_long')
-    return found
+# inappropriate_categories function moved to inappropriate_content_filter.py
 
 # Preselect filter (fast, simple filter for obvious low-quality/irrelevant text)
 def preselect_filter(text: str) -> bool:
@@ -677,159 +554,9 @@ def preselect_filter(text: str) -> bool:
         return False
     return True
 
-class LlamaAnalyzer:
-    """Analyzes Llama model performance on different categories"""
-    
-    def __init__(self):
-        print("🦙 Initializing Llama model for AI-based preselection...")
-        try:
-            self.tokenizer = AutoTokenizer.from_pretrained("data4elm/Llama-400M-12L")
-            self.model = AutoModelForCausalLM.from_pretrained(
-                "data4elm/Llama-400M-12L",
-                torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
-                device_map="auto" if torch.cuda.is_available() else None
-            )
-            
-            # Add padding token if not present
-            if self.tokenizer.pad_token is None:
-                self.tokenizer.pad_token = self.tokenizer.eos_token
-            
-            print("✅ Llama model loaded successfully for AI preselection!")
-        except Exception as e:
-            print(f"⚠️ Warning: Could not load Llama model: {e}")
-            self.tokenizer = None
-            self.model = None
-    
-    def analyze_performance(self, text: str) -> Dict[str, float]:
-        """
-        Analyze Llama's performance on a text sample for each category
-        Returns scores between 0-1 for each category
-        """
-        if self.model is None or self.tokenizer is None:
-            # Return default scores if model not available
-            return {category: 0.5 for category in PRESELECT_CATEGORIES.keys()}
-        
-        scores = {}
-        
-        try:
-            # Tokenize input
-            inputs = self.tokenizer(text, return_tensors="pt", truncation=True, max_length=512)
-            inputs = {k: v.to(self.model.device) for k, v in inputs.items()}
-            
-            # Generate continuation
-            with torch.no_grad():
-                outputs = self.model.generate(
-                    **inputs,
-                    max_new_tokens=50,  # Generate 50 new tokens instead of setting max_length
-                    num_return_sequences=1,
-                    temperature=0.7,
-                    do_sample=True,
-                    pad_token_id=self.tokenizer.eos_token_id
-                )
-            
-            generated_text = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
-            
-            # Score each category
-            for category, patterns in PRESELECT_CATEGORIES.items():
-                category_score = self._score_category(text, generated_text, patterns)
-                scores[category] = category_score
-            
-        except Exception as e:
-            logger.error(f"Error in Llama analysis: {e}")
-            # Default scores on error
-            scores = {category: 0.5 for category in PRESELECT_CATEGORIES.keys()}
-        
-        return scores
-    
-    def _score_category(self, input_text: str, generated_text: str, patterns: List[str]) -> float:
-        """
-        Score how well Llama handles a specific category
-        Uses pattern matching and basic heuristics
-        """
-        score = 0.0
-        
-        # Check for pattern presence in input
-        input_pattern_matches = sum(1 for p in patterns if p.lower() in input_text.lower())
-        
-        # Check for pattern presence in output
-        output_pattern_matches = sum(1 for p in patterns if p.lower() in generated_text.lower())
-        
-        # Basic coherence check
-        try:
-            input_words = set(input_text.lower().split())
-            output_words = set(generated_text.lower().split())
-            coherence = len(input_words.intersection(output_words)) / len(input_words)
-        except:
-            coherence = 0.0
-        
-        # Combine scores
-        pattern_score = (input_pattern_matches + output_pattern_matches) / (len(patterns) * 2)
-        
-        score = (pattern_score * 0.7) + (coherence * 0.3)
-        return min(max(score, 0.0), 1.0)  # Normalize to 0-1
 
-class DatasetAnalyzer:
-    """Analyzes the dataset to find samples that could improve Llama's performance"""
-    
-    def __init__(self, llama_analyzer: LlamaAnalyzer):
-        self.llama = llama_analyzer
-        self.performance_cache = {}
-        self.cache_file = Path(CACHE_DIR) / "llama_analysis_cache.json"
-        self._load_cache()
-    
-    def _load_cache(self):
-        """Load cached analysis results"""
-        if self.cache_file.exists():
-            try:
-                with open(self.cache_file, 'r', encoding='utf-8') as f:
-                    self.performance_cache = json.load(f)
-                logger.info(f"Loaded {len(self.performance_cache)} cached analysis results")
-            except Exception as e:
-                logger.error(f"Error loading cache: {e}")
-    
-    def _save_cache(self):
-        """Save analysis results to cache"""
-        try:
-            with open(self.cache_file, 'w', encoding='utf-8') as f:
-                json.dump(self.performance_cache, f, indent=2)
-        except Exception as e:
-            logger.error(f"Error saving cache: {e}")
-    
-    def analyze_sample(self, text: str) -> Dict[str, Any]:
-        """
-        Analyze a single sample to determine its potential value
-        for improving Llama's performance
-        """
-        # Check cache
-        text_hash = hashlib.md5(text.encode('utf-8')).hexdigest()
-        if text_hash in self.performance_cache:
-            return self.performance_cache[text_hash]
-        
-        # Get Llama's performance scores
-        category_scores = self.llama.analyze_performance(text)
-        
-        # Calculate potential value for each category
-        potential_value = {}
-        for category, score in category_scores.items():
-            # Lower scores indicate more room for improvement
-            improvement_potential = 1.0 - score
-            potential_value[category] = improvement_potential
-        
-        result = {
-            'text': text,
-            'category_scores': category_scores,
-            'potential_value': potential_value,
-            'timestamp': datetime.now().isoformat()
-        }
-        
-        # Cache the result
-        self.performance_cache[text_hash] = result
-        
-        # Save cache periodically
-        if len(self.performance_cache) % 10 == 0:
-            self._save_cache()
-        
-        return result
+
+
 
 class RuleBasedPreSelect:
     """Enhanced Rule-Based PreSelect (Non-AI) with comprehensive rules"""
@@ -1248,10 +975,9 @@ class BartFilter:
 class VerificationSystem:
     """Advanced verification system for filtered samples"""
     
-    def __init__(self, llama_analyzer):
-        self.llama = llama_analyzer
+    def __init__(self):
         self.baseline_scores = None
-        self.verification_cache = {}
+        # Cache removed for simplicity
     
     def establish_baseline(self, analysis_results: List[Dict]):
         """Calculate baseline performance metrics"""
@@ -1280,10 +1006,7 @@ class VerificationSystem:
     
     def verify_sample(self, text: str, expected_category: str) -> Dict[str, Any]:
         """Verify a single sample's quality and category fit"""
-        text_hash = hashlib.md5(text.encode()).hexdigest()
-        
-        if text_hash in self.verification_cache:
-            return self.verification_cache[text_hash]
+        # Cache removed for simplicity
         
         try:
             # Get Llama analysis
@@ -1311,7 +1034,7 @@ class VerificationSystem:
                 'timestamp': datetime.now().isoformat()
             }
             
-            self.verification_cache[text_hash] = result
+            # Cache removed for simplicity
             return result
             
         except Exception as e:
@@ -1324,10 +1047,42 @@ class VerificationSystem:
 class DatasetExporter:
     """Advanced dataset export with multiple formats and metadata"""
     
-    def __init__(self, export_dir: str = "filtered_data_advanced"):
+    def __init__(self, export_dir: str = "filtered_data_advanced", clear_previous: bool = True):
         self.export_dir = Path(export_dir)
         self.export_dir.mkdir(parents=True, exist_ok=True)
         self.export_stats = defaultdict(int)
+        
+        # Clear previous files if requested
+        if clear_previous:
+            self._clear_previous_files()
+    
+    def _clear_previous_files(self):
+        """Clear previous export files to avoid accumulation"""
+        try:
+            # Clear main export directory files
+            for file in self.export_dir.glob("*.jsonl"):
+                file.unlink()
+                print(f"🗑️  Cleared: {file.name}")
+            for file in self.export_dir.glob("*.csv"):
+                file.unlink()
+                print(f"🗑️  Cleared: {file.name}")
+            for file in self.export_dir.glob("*.json"):
+                file.unlink()
+                print(f"🗑️  Cleared: {file.name}")
+            
+            # Clear category training directory files
+            category_dir = Path("category_training_datasets")
+            if category_dir.exists():
+                for file in category_dir.glob("*.jsonl"):
+                    file.unlink()
+                    print(f"🗑️  Cleared: category_training_datasets/{file.name}")
+                for file in category_dir.glob("*.json"):
+                    file.unlink()
+                    print(f"🗑️  Cleared: category_training_datasets/{file.name}")
+                    
+            print("✅ Previous export files cleared!")
+        except Exception as e:
+            print(f"⚠️  Warning: Could not clear some files: {e}")
     
     def export_filtered_samples(self, samples: List[Dict], format_type: str = "jsonl") -> str:
         """Export filtered samples with comprehensive metadata"""
@@ -1416,48 +1171,295 @@ class DatasetExporter:
             json.dump(summary, f, indent=2, ensure_ascii=False)
         
         print(f"📊 Summary statistics saved to {summary_file}")
+    
+    def export_category_training_datasets(self, filtered_results: List[Dict], export_mode: str = "separate", 
+                                         save_function_calling: bool = True, save_reasoning: bool = True,
+                                         save_roleplay: bool = True, save_chatrag: bool = True, 
+                                         save_combined: bool = True, save_summary: bool = False) -> Dict[str, str]:
+        """Export category-specific training datasets for the 4 target categories
+        
+        Args:
+            filtered_results: List of filtered sample dictionaries
+            export_mode: "separate" (4 files), "combined" (1 file), or "none" (no export, stats only)
+            save_function_calling: Whether to save function calling file
+            save_reasoning: Whether to save reasoning file  
+            save_roleplay: Whether to save roleplay file
+            save_chatrag: Whether to save chatrag file
+            save_combined: Whether to save combined file
+        """
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        exported_files = {}
+        category_stats = {}
+        
+        # Map 'rag' to 'chatrag' for consistency with your goal
+        category_mapping = {
+            'function_calling': 'function_calling',
+            'reasoning': 'reasoning', 
+            'roleplay': 'roleplay',
+            'rag': 'chatrag'
+        }
+        
+        # Categorize samples
+        categorized_samples = {
+            'function_calling': [],
+            'reasoning': [],
+            'roleplay': [],
+            'chatrag': []
+        }
+        
+        for result in filtered_results:
+            # Include ALL samples that have a valid category (not just those passing quality filters)
+            category = result.get('preselect_category', 'uncategorized')
+            mapped_category = category_mapping.get(category)
+            
+            if mapped_category:
+                # Check if sample passed all filters OR just has good category relevance
+                passed_all_filters = result.get('should_include', False)
+                is_category_relevant = result.get('is_category_relevant', False)
+                
+                # Include if it passed all filters OR if it's category-relevant with decent quality
+                basic_quality_ok = result.get('quality_score', 0.0) > 0.2  # Lower threshold for category training
+                
+                if passed_all_filters or (is_category_relevant and basic_quality_ok):
+                    # Clean training format - just text for actual training
+                    training_sample = {
+                        'text': result.get('text', '').strip()
+                    }
+                    
+                    # Full sample with metadata for analysis (optional)
+                    full_sample = {
+                        'text': result.get('text', ''),
+                        'category': mapped_category,
+                        'quality_score': result.get('quality_score', 0.0),
+                        'filter_passed': passed_all_filters,
+                        'category_relevant': is_category_relevant,
+                        'metadata': {
+                            'original_category': category,
+                            # 'toxicity_score' removed (no more toxic-bert),
+                            'quality_metrics': result.get('quality_metrics', {}),
+                            # 'inappropriate_categories' removed,
+                            'timestamp': datetime.now().isoformat()
+                        }
+                    }
+                    
+                    # Store both versions
+                    categorized_samples[mapped_category].append({
+                        'training': training_sample,
+                        'full': full_sample
+                    })
+        
+        # Calculate category statistics first
+        total_exported = 0
+        for category, sample_list in categorized_samples.items():
+            category_stats[category] = len(sample_list)
+            total_exported += len(sample_list)
+        
+        # Export based on mode
+        if export_mode == "separate":
+            # Define toggle mapping for each category
+            category_toggles = {
+                'function_calling': save_function_calling,
+                'reasoning': save_reasoning, 
+                'roleplay': save_roleplay,
+                'chatrag': save_chatrag
+            }
+            
+            # Export each category to separate files (with toggles)
+            for category, samples in categorized_samples.items():
+                if not samples:
+                    print(f"⚠️  No samples found for {category} category")
+                    continue
+                
+                # Check if this category is enabled
+                if not category_toggles.get(category, True):
+                    print(f"⏭️  Skipping {category} export (toggle disabled) - {len(samples)} samples would be saved")
+                    continue
+                    
+                filename = f"{category}_training_{timestamp}.jsonl"
+                filepath = self.export_dir / filename
+                
+                with open(filepath, 'w', encoding='utf-8') as f:
+                    for sample_data in samples:
+                        # Use clean training format (just text)
+                        json.dump(sample_data['training'], f, ensure_ascii=False)
+                        f.write('\n')
+                
+                exported_files[category] = str(filepath)
+                print(f"✅ Exported {len(samples)} {category} samples to {filename}")
+            
+            # Also create combined file if requested (even in separate mode)
+            if save_combined and total_exported > 0:
+                combined_filename = f"all_categories_training_{timestamp}.jsonl"
+                combined_filepath = self.export_dir / combined_filename
+                
+                with open(combined_filepath, 'w', encoding='utf-8') as f:
+                    for category, samples in categorized_samples.items():
+                        if category_toggles.get(category, True):  # Only include enabled categories
+                            for sample_data in samples:
+                                # Use clean training format (just text)
+                                json.dump(sample_data['training'], f, ensure_ascii=False)
+                                f.write('\n')
+                
+                exported_files['combined'] = str(combined_filepath)
+                print(f"✅ Exported combined training file with {total_exported} samples: {combined_filename}")
+        
+        elif export_mode == "combined":
+            # Create single combined training file with all categories
+            if total_exported > 0:
+                if save_combined:
+                    combined_filename = f"all_categories_training_{timestamp}.jsonl"
+                    combined_filepath = self.export_dir / combined_filename
+                    
+                    with open(combined_filepath, 'w', encoding='utf-8') as f:
+                        for category, samples in categorized_samples.items():
+                            for sample_data in samples:
+                                # Use clean training format (just text)
+                                json.dump(sample_data['training'], f, ensure_ascii=False)
+                                f.write('\n')
+                    
+                    exported_files['combined'] = str(combined_filepath)
+                    print(f"✅ Exported combined training file with {total_exported} samples: {combined_filename}")
+                else:
+                    print(f"⏭️  Skipping combined file export (toggle disabled) - {total_exported} samples would be saved")
+            else:
+                print("⚠️  No samples to export")
+        
+        elif export_mode == "none":
+            # No file export, just show statistics
+            print(f"📊 Export mode: NONE - Only showing statistics (no files created)")
+            print(f"📈 {total_exported} samples would be exported if export was enabled")
+        
+        else:
+            print(f"⚠️  Unknown export mode: {export_mode}. Using 'separate' mode.")
+            # Fallback to separate mode
+            for category, samples in categorized_samples.items():
+                if samples:
+                    filename = f"{category}_training_{timestamp}.jsonl"
+                    filepath = self.export_dir / filename
+                    
+                    with open(filepath, 'w', encoding='utf-8') as f:
+                        for sample_data in samples:
+                            # Use clean training format (just text)
+                            json.dump(sample_data['training'], f, ensure_ascii=False)
+                            f.write('\n')
+                    
+                    exported_files[category] = str(filepath)
+                    print(f"✅ Exported {len(samples)} {category} samples to {filename}")
+                else:
+                    print(f"⚠️  No samples found for {category} category")
+        
+        # Create category distribution summary
+        summary = {
+            'export_info': {
+                'timestamp': datetime.now().isoformat(),
+                'total_samples_exported': total_exported,
+                'export_directory': str(self.export_dir)
+            },
+            'category_statistics': category_stats,
+            'files_created': exported_files,
+            'training_readiness': {
+                'function_calling': {
+                    'samples': category_stats.get('function_calling', 0),
+                    'ready_for_training': category_stats.get('function_calling', 0) >= 100,
+                    'recommended_min': 1000
+                },
+                'reasoning': {
+                    'samples': category_stats.get('reasoning', 0),
+                    'ready_for_training': category_stats.get('reasoning', 0) >= 100,
+                    'recommended_min': 1000
+                },
+                'roleplay': {
+                    'samples': category_stats.get('roleplay', 0),
+                    'ready_for_training': category_stats.get('roleplay', 0) >= 100,
+                    'recommended_min': 1000
+                },
+                'chatrag': {
+                    'samples': category_stats.get('chatrag', 0),
+                    'ready_for_training': category_stats.get('chatrag', 0) >= 100,
+                    'recommended_min': 1000
+                }
+            }
+        }
+        
+        # Only save summary file if requested
+        if save_summary:
+            summary_file = self.export_dir / f"category_training_summary_{timestamp}.json"
+            with open(summary_file, 'w', encoding='utf-8') as f:
+                json.dump(summary, f, indent=2, ensure_ascii=False)
+            print(f"📋 Summary saved to: {summary_file} 💾")
+        
+        print(f"\n🎯 CATEGORY TRAINING DATASET SUMMARY:")
+        print(f"📊 Total samples exported: {total_exported}")
+        category_emojis = {'function_calling': '📞', 'reasoning': '🧠', 'roleplay': '🎭', 'chatrag': '💬'}
+        for category, count in category_stats.items():
+            emoji = category_emojis.get(category, '📄')
+            status = "✅ Ready" if count >= 100 else "⚠️  Need more"
+            print(f"  {emoji} {category}: {count} samples ({status})")
+        
+        return exported_files
 
 # Example usage and comprehensive testing
 def main():
     """Comprehensive testing with all enhancements and toggles"""
     # --- TOGGLES AND SETTINGS ---
-    ENABLE_AI_TOXIC_FILTER = True   # Toggle AI-based toxic filter (toxic-bert)
+    # AI_TOXIC_FILTER REMOVED
     ENABLE_RULE_BASED_FILTER = True # Toggle rule-based filtering
     ENABLE_PRESELECT_FILTER = True  # Toggle original preselect filter (fast, simple filter)
-    ENABLE_AI_PRESELECT = True      # Toggle AI-based preselection (Llama performance analysis)
+
     
     # Multi-Variant PreSelect Toggles
     ENABLE_RULE_BASED_PRESELECT = True    # Enhanced rule-based preselect (Non-AI)
     ENABLE_EMBEDDING_PRESELECT = True     # Zero-shot/embedding-based preselect
-    ENABLE_MODEL_PRESELECT = True         # Model-in-the-loop preselect
+    ENABLE_MODEL_PRESELECT = False        # Model-in-the-loop preselect
     
-    ENABLE_CACHE = True             # Toggle caching (stores filter results for speed)
-    TOXICITY_THRESHOLD = 0.7        # Toxicity threshold (0.1-0.9)
+    # CACHE FUNCTIONALITY REMOVED FOR SIMPLICITY
+    # TOXICITY_THRESHOLD removed (no more toxic-bert)
     QUALITY_THRESHOLD = 0.4         # Quality threshold (0.0-1.0)
     LLAMA_IMPROVEMENT_THRESHOLD = 0.6  # Threshold for Llama improvement potential (0.0-1.0)
     DOMAIN = 'general'              # Domain: general, educational, children, medical
-    BATCH_SIZE = 32                 # Batch size for processing
-    NUM_SAMPLES = 500                # <--- ADJUST THIS to control how many samples to process
+    BATCH_SIZE = 32                 # Batch size for processing (not currently used)
+    NUM_SAMPLES = 50000               # <--- ADJUST THIS to control how many samples to process
+    CLEAR_PREVIOUS_FILES = True      # <--- ADJUST THIS to clear previous output files on each run
     HF_TOKEN = "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" # <--- PUT YOUR HUGGING FACE TOKEN HERE
+    
+    # Export Settings
+    EXPORT_MODE = os.environ.get('EXPORT_MODE', 'separate')  # "separate" (4 files), "combined" (1 file), or "none" (no export)
+    
+    # Individual File Toggles - Control which specific files to save
+    SAVE_FUNCTION_CALLING = os.environ.get('SAVE_FUNCTION_CALLING', 'true').lower() == 'true'
+    SAVE_REASONING = os.environ.get('SAVE_REASONING', 'true').lower() == 'true'
+    SAVE_ROLEPLAY = os.environ.get('SAVE_ROLEPLAY', 'true').lower() == 'true'
+    SAVE_CHATRAG = os.environ.get('SAVE_CHATRAG', 'true').lower() == 'true'
+    SAVE_COMBINED = os.environ.get('SAVE_COMBINED', 'true').lower() == 'true'
+    SAVE_SUMMARY = os.environ.get('SAVE_SUMMARY', 'false').lower() == 'true'  # Summary disabled by default
 
     print("\n" + "="*60)
     print("🚀 ENHANCED FILTERING TEST WITH TOGGLES")
     print("="*60)
-    print(f"AI-based toxic filter:    {'ENABLED' if ENABLE_AI_TOXIC_FILTER else 'DISABLED'}")
+    print(f"AI-based toxic filter:    REMOVED")
     print(f"Rule-based filter:        {'ENABLED' if ENABLE_RULE_BASED_FILTER else 'DISABLED'}")
     print(f"Original preselect:       {'ENABLED' if ENABLE_PRESELECT_FILTER else 'DISABLED'}")
-    print(f"AI-based preselection:    {'ENABLED' if ENABLE_AI_PRESELECT else 'DISABLED'} (Llama performance analysis)")
+
     print(f"\n🎯 MULTI-VARIANT PRESELECT:")
     print(f"  Rule-based preselect:   {'ENABLED' if ENABLE_RULE_BASED_PRESELECT else 'DISABLED'} (Non-AI)")
     print(f"  Embedding preselect:    {'ENABLED' if ENABLE_EMBEDDING_PRESELECT else 'DISABLED'} (Zero-shot)")
     print(f"  Model preselect:        {'ENABLED' if ENABLE_MODEL_PRESELECT else 'DISABLED'} (Model-in-the-loop)")
-    print(f"\nCaching:                  {'ENABLED' if ENABLE_CACHE else 'DISABLED'} (stores filter results for speed)")
-    print(f"Toxicity threshold:       {TOXICITY_THRESHOLD}")
+    # Caching completely removed
+    # Toxicity threshold removed
     print(f"Quality threshold:        {QUALITY_THRESHOLD}")
     print(f"Llama improvement thresh: {LLAMA_IMPROVEMENT_THRESHOLD}")
     print(f"Domain:                   {DOMAIN}")
-    print(f"Batch size:               {BATCH_SIZE}")
+    print(f"Batch size:               {BATCH_SIZE} (not used)")
     print(f"Num samples:              {NUM_SAMPLES}")
+    print(f"Clear previous files:     {'ENABLED' if CLEAR_PREVIOUS_FILES else 'DISABLED'}")
+    print(f"Export mode:              {EXPORT_MODE} ({'4 separate files' if EXPORT_MODE == 'separate' else '1 combined file' if EXPORT_MODE == 'combined' else 'no files (stats only)'})")
+    print(f"File save toggles:")
+    print(f"  📞 Function calling:     {'ENABLED' if SAVE_FUNCTION_CALLING else 'DISABLED'}")
+    print(f"  🧠 Reasoning:            {'ENABLED' if SAVE_REASONING else 'DISABLED'}")
+    print(f"  🎭 Roleplay:             {'ENABLED' if SAVE_ROLEPLAY else 'DISABLED'}")
+    print(f"  💬 ChatRAG:              {'ENABLED' if SAVE_CHATRAG else 'DISABLED'}")
+    print(f"  📄 Combined file:        {'ENABLED' if SAVE_COMBINED else 'DISABLED'}")
+    print(f"  📋 Summary file:         {'ENABLED' if SAVE_SUMMARY else 'DISABLED'}")
     print("="*60 + "\n")
 
     # Hugging Face login
@@ -1476,45 +1478,30 @@ def main():
             print(f"⚠️ Warning: Could not initialize multi-variant preselect: {e}")
             multi_preselect = None
 
-    # Initialize AI-based preselection system (if enabled)
-    llama_analyzer = None
-    dataset_analyzer = None
-    if ENABLE_AI_PRESELECT:
-        try:
-            llama_analyzer = LlamaAnalyzer()
-            dataset_analyzer = DatasetAnalyzer(llama_analyzer)
-            print("✅ AI-based preselection system initialized!")
-        except Exception as e:
-            print(f"⚠️ Warning: Could not initialize AI preselection: {e}")
-            print("   Continuing without AI preselection...")
-            ENABLE_AI_PRESELECT = False
+
 
     # Configure filter system
     config = FilterConfig(
-        toxicity_threshold=TOXICITY_THRESHOLD,
+        # toxicity_threshold removed,
         quality_threshold=QUALITY_THRESHOLD,
         batch_size=BATCH_SIZE,
-        cache_enabled=ENABLE_CACHE,
+        # cache_enabled removed,
         context_aware=True,
         domain=DOMAIN
     )
     filter_system = EnhancedContentFilter(config)
-    filter_system.config.cache_enabled = ENABLE_CACHE
+    # cache_enabled removed
     filter_system.config.domain = DOMAIN
-    filter_system.config.toxicity_threshold = TOXICITY_THRESHOLD
+    # filter_system.config.toxicity_threshold removed
     filter_system.config.quality_threshold = QUALITY_THRESHOLD
     filter_system.config.batch_size = BATCH_SIZE
 
     # Patch filter system to respect toggles
-    orig_ai_content_filter = filter_system.ai_content_filter
+    # orig_ai_content_filter removed
     orig_rule_based_filter = filter_system.rule_based_filter
     orig_comprehensive_filter = filter_system.comprehensive_filter
 
-    def ai_content_filter_toggle(text):
-        if ENABLE_AI_TOXIC_FILTER:
-            return orig_ai_content_filter(text)
-        else:
-            return {'toxicity_score': 0.0, 'is_toxic': False, 'confidence': 0.0, 'error': None}
+    # ai_content_filter_toggle removed
 
     def rule_based_filter_toggle(text):
         if ENABLE_RULE_BASED_FILTER:
@@ -1527,9 +1514,7 @@ def main():
         if not ENABLE_PRESELECT_FILTER:
             # Copy-paste the logic from EnhancedContentFilter.comprehensive_filter, but skip preselect
             rule_result = filter_system.rule_based_filter(text)
-            ai_result = None
-            if rule_result['severity_score'] > 0 or not rule_result['is_safe']:
-                ai_result = filter_system.ai_content_filter(text)
+            # ai_result removed
             quality_result = filter_system.quality_assessment(text)
             overall_quality = np.mean(list(quality_result.values()))
             context_adjustments = filter_system.conversation_analyzer.should_adjust_thresholds()
@@ -1538,32 +1523,31 @@ def main():
             if 'quality_threshold' in context_adjustments:
                 final_quality_threshold += context_adjustments['quality_threshold']
             is_safe = rule_result['is_safe']
-            if ai_result:
-                is_safe = is_safe and not ai_result['is_toxic']
+            # AI toxic filtering removed
             meets_quality = overall_quality >= final_quality_threshold
             preselect_category = categorize_sample(text)
-            inappropriate_cats = inappropriate_categories(text)
+            # inappropriate_categories removed
             return {
                 'text': text,
                 'is_safe': is_safe,
                 'meets_quality': meets_quality,
                 'should_include': is_safe and meets_quality,
                 'rule_based': rule_result,
-                'ai_based': ai_result,
+                # 'ai_based' removed,
                 'quality': quality_result,
                 'overall_quality': overall_quality,
                 'config_used': filter_system.config.domain,
                 'context_adjustments': context_adjustments,
                 'performance_metrics': filter_system.performance_monitor.get_performance_report(),
                 'preselect_category': preselect_category,
-                'inappropriate_categories': inappropriate_cats,
+                # 'inappropriate_categories' removed,
                 'preselect_filtered': False,
                 'preselect_reason': None
             }
         else:
             return orig_comprehensive_filter(text)
 
-    filter_system.ai_content_filter = ai_content_filter_toggle
+    # ai_content_filter toggle removed
     filter_system.rule_based_filter = rule_based_filter_toggle
     filter_system.comprehensive_filter = comprehensive_filter_toggle
 
@@ -1585,22 +1569,22 @@ def main():
     total_processed = 0
     passed_filters = 0
     category_counts = {'roleplay': 0, 'reasoning': 0, 'function_calling': 0, 'rag': 0, 'uncategorized': 0}
-    inappropriate_counts = {'profanity': 0, 'hate_speech': 0, 'violence': 0, 'sexual_content': 0, 'too_long': 0, 'too_short': 0, 'excessive_repetition': 0, 'excessive_caps': 0}
+    # inappropriate_counts removed
     preselect_filtered = 0
-    ai_filtered = 0
+    # ai_filtered removed
     rule_filtered = 0
     quality_filtered = 0
+    category_filtered = 0  # Rejected for being uncategorized/irrelevant
     
     # Track samples cleared by each filter
     cleared_by_preselect = 0    # Passed basic preselect
     cleared_by_rules = 0        # Passed rule-based filter
-    cleared_by_ai_toxic = 0     # Passed AI toxic filter
+    # cleared_by_ai_toxic removed
     cleared_by_quality = 0      # Passed quality assessment
+    cleared_by_category = 0     # Passed category relevance check
     cleared_all_filters = 0     # Passed everything
     
-    # AI preselection tracking
-    llama_improvement_scores = {'roleplay': [], 'reasoning': [], 'function_calling': [], 'rag': []}
-    high_potential_samples = []
+
     
     # Multi-variant preselect tracking
     multi_preselect_stats = {
@@ -1645,28 +1629,7 @@ def main():
                 logger.error(f"Error in multi-variant preselect: {e}")
                 result['multi_preselect'] = None
         
-        # AI-based preselection analysis (if enabled)
-        if ENABLE_AI_PRESELECT and dataset_analyzer and result['should_include']:
-            try:
-                llama_analysis = dataset_analyzer.analyze_sample(text)
-                result['llama_analysis'] = llama_analysis
-                
-                # Track improvement potential for each category
-                for category, potential in llama_analysis['potential_value'].items():
-                    llama_improvement_scores[category].append(potential)
-                    
-                    # If this sample has high improvement potential for any category
-                    if potential > LLAMA_IMPROVEMENT_THRESHOLD:
-                        high_potential_samples.append({
-                            'text': text[:200] + '...' if len(text) > 200 else text,
-                            'category': category,
-                            'improvement_potential': potential,
-                            'llama_scores': llama_analysis['category_scores']
-                        })
-                        
-            except Exception as e:
-                logger.error(f"Error in AI preselection analysis: {e}")
-                result['llama_analysis'] = None
+
         
         filtered_results.append(result)
         
@@ -1682,15 +1645,17 @@ def main():
             if result.get('rule_based') and result['rule_based'].get('is_safe', True):
                 cleared_by_rules += 1
                 
-                # If passed rules, check AI toxic filter
-                if not result.get('ai_based') or not result['ai_based'].get('is_toxic', False):
-                    cleared_by_ai_toxic += 1
+                # AI toxic filter removed - directly proceed to quality check
+                
+                # If passed rule-based, check quality
+                if result.get('meets_quality', False):
+                    cleared_by_quality += 1
                     
-                    # If passed AI toxic, check quality
-                    if result.get('meets_quality', False):
-                        cleared_by_quality += 1
+                    # If passed quality, check category relevance
+                    if result.get('is_category_relevant', False):
+                        cleared_by_category += 1
                         
-                        # If passed quality, it cleared all filters
+                        # If passed category relevance, it cleared all filters
                         if result.get('should_include', False):
                             cleared_all_filters += 1
         
@@ -1698,42 +1663,43 @@ def main():
         if result['preselect_category'] in category_counts:
             category_counts[result['preselect_category']] += 1
         
-        # Count inappropriate categories
-        for inap_cat in result['inappropriate_categories']:
-            if inap_cat in inappropriate_counts:
-                inappropriate_counts[inap_cat] += 1
+        # inappropriate_categories counting removed
         
         # Count filter types that rejected
         if result.get('preselect_filtered', False):
             preselect_filtered += 1
         elif not result['should_include']:
-            if result.get('ai_based') and result['ai_based'].get('is_toxic', False):
-                ai_filtered += 1
-            elif result.get('rule_based') and not result['rule_based'].get('is_safe', True):
+            if result.get('rule_based') and not result['rule_based'].get('is_safe', True):
                 rule_filtered += 1
             elif not result.get('meets_quality', False):
                 quality_filtered += 1
+            elif not result.get('is_category_relevant', False):
+                category_filtered += 1
         
         # Print summary every 100 samples
         if (i + 1) % 100 == 0:
-            print(f"\n--- Summary after {i + 1} samples ---")
+            print(f"\n🔄 --- Summary after {i + 1} samples ---")
             print(f"📈 SAMPLES CLEARED BY EACH FILTER:")
-            print(f"  1️⃣ Preselect filter:     {cleared_by_preselect}/{total_processed} ({cleared_by_preselect/total_processed*100:.1f}%)")
-            print(f"  2️⃣ Rule-based filter:    {cleared_by_rules}/{total_processed} ({cleared_by_rules/total_processed*100:.1f}%)")
-            print(f"  3️⃣ AI toxic filter:      {cleared_by_ai_toxic}/{total_processed} ({cleared_by_ai_toxic/total_processed*100:.1f}%)")
-            print(f"  4️⃣ Quality assessment:   {cleared_by_quality}/{total_processed} ({cleared_by_quality/total_processed*100:.1f}%)")
-            print(f"  ✅ ALL FILTERS PASSED:   {cleared_all_filters}/{total_processed} ({cleared_all_filters/total_processed*100:.1f}%)")
+            print(f"  1️⃣ Preselect filter:     {cleared_by_preselect}/{total_processed} ({cleared_by_preselect/total_processed*100:.1f}%) 🚪")
+            print(f"  2️⃣ Rule-based filter:    {cleared_by_rules}/{total_processed} ({cleared_by_rules/total_processed*100:.1f}%) 📋")
+            # AI toxic filter stats removed
+            print(f"  3️⃣ Quality assessment:   {cleared_by_quality}/{total_processed} ({cleared_by_quality/total_processed*100:.1f}%) ⭐")
+            print(f"  4️⃣ Category relevance:   {cleared_by_category}/{total_processed} ({cleared_by_category/total_processed*100:.1f}%) 🎯")
+            print(f"  ✅ ALL FILTERS PASSED:   {cleared_all_filters}/{total_processed} ({cleared_all_filters/total_processed*100:.1f}%) 🏆")
             
             print(f"\n❌ SAMPLES REJECTED BY:")
-            print(f"  Preselect filter: {preselect_filtered} ({preselect_filtered/total_processed*100:.1f}%)")
-            print(f"  Rule-based filter: {rule_filtered} ({rule_filtered/total_processed*100:.1f}%)")
-            print(f"  AI toxic filter: {ai_filtered} ({ai_filtered/total_processed*100:.1f}%)")
-            print(f"  Quality filter: {quality_filtered} ({quality_filtered/total_processed*100:.1f}%)")
+            print(f"  🚪 Preselect filter: {preselect_filtered} ({preselect_filtered/total_processed*100:.1f}%)")
+            print(f"  📋 Rule-based filter: {rule_filtered} ({rule_filtered/total_processed*100:.1f}%)")
+            # AI toxic filter rejection stats removed
+            print(f"  ⭐ Quality filter: {quality_filtered} ({quality_filtered/total_processed*100:.1f}%)")
+            print(f"  🎯 Category filter: {category_filtered} ({category_filtered/total_processed*100:.1f}%)")
             
             print(f"\n📊 Category distribution:")
+            category_emojis = {'function_calling': '📞', 'reasoning': '🧠', 'roleplay': '🎭', 'rag': '💬', 'uncategorized': '❓'}
             for cat, count in category_counts.items():
                 if count > 0:
-                    print(f"  {cat}: {count} ({count/total_processed*100:.1f}%)")
+                    emoji = category_emojis.get(cat, '📄')
+                    print(f"  {emoji} {cat}: {count} ({count/total_processed*100:.1f}%)")
             
             # Multi-variant preselect summary
             if multi_preselect:
@@ -1746,81 +1712,59 @@ def main():
                     print(f"  Model passed: {multi_preselect_stats['model_passed']}/{total_processed} ({multi_preselect_stats['model_passed']/total_processed*100:.1f}%)")
                 print(f"  Overall passed: {multi_preselect_stats['overall_passed']}/{total_processed} ({multi_preselect_stats['overall_passed']/total_processed*100:.1f}%)")
             
-            # AI preselection summary
-            if ENABLE_AI_PRESELECT and llama_improvement_scores:
-                print(f"\n🦙 Llama improvement potential (avg):")
-                for cat, scores in llama_improvement_scores.items():
-                    if scores:
-                        avg_potential = np.mean(scores)
-                        print(f"  {cat}: {avg_potential:.2f}")
-                print(f"🎯 High-potential samples found: {len(high_potential_samples)}")
+
             
-            print(f"\n⚠️  Top inappropriate content:")
-            sorted_inap = sorted(inappropriate_counts.items(), key=lambda x: x[1], reverse=True)
-            for cat, count in sorted_inap[:5]:
-                if count > 0:
-                    print(f"  {cat}: {count} ({count/total_processed*100:.1f}%)")
+            # inappropriate content display removed
 
     print(f"\n" + "="*60)
-    print(f"🎯 FINAL SUMMARY - {total_processed} samples processed")
+    print(f"🏁 FINAL SUMMARY - {total_processed} samples processed")
     print(f"="*60)
     
     print(f"📈 FINAL FILTER CLEARANCE RATES:")
-    print(f"  1️⃣ Preselect filter:     {cleared_by_preselect}/{total_processed} ({cleared_by_preselect/total_processed*100:.1f}%)")
-    print(f"  2️⃣ Rule-based filter:    {cleared_by_rules}/{total_processed} ({cleared_by_rules/total_processed*100:.1f}%)")
-    print(f"  3️⃣ AI toxic filter:      {cleared_by_ai_toxic}/{total_processed} ({cleared_by_ai_toxic/total_processed*100:.1f}%)")
-    print(f"  4️⃣ Quality assessment:   {cleared_by_quality}/{total_processed} ({cleared_by_quality/total_processed*100:.1f}%)")
-    print(f"  ✅ ALL FILTERS PASSED:   {cleared_all_filters}/{total_processed} ({cleared_all_filters/total_processed*100:.1f}%)")
+    print(f"  1️⃣ Preselect filter:     {cleared_by_preselect}/{total_processed} ({cleared_by_preselect/total_processed*100:.1f}%) 🚪")
+    print(f"  2️⃣ Rule-based filter:    {cleared_by_rules}/{total_processed} ({cleared_by_rules/total_processed*100:.1f}%) 📋")
+    # AI toxic filter final stats removed
+    print(f"  3️⃣ Quality assessment:   {cleared_by_quality}/{total_processed} ({cleared_by_quality/total_processed*100:.1f}%) ⭐")
+    print(f"  4️⃣ Category relevance:   {cleared_by_category}/{total_processed} ({cleared_by_category/total_processed*100:.1f}%) 🎯")
+    print(f"  ✅ ALL FILTERS PASSED:   {cleared_all_filters}/{total_processed} ({cleared_all_filters/total_processed*100:.1f}%) 🏆")
     
     print(f"\n❌ FINAL REJECTION BREAKDOWN:")
-    print(f"  Preselect filter: {preselect_filtered} ({preselect_filtered/total_processed*100:.1f}%)")
-    print(f"  Rule-based filter: {rule_filtered} ({rule_filtered/total_processed*100:.1f}%)")
-    print(f"  AI toxic filter: {ai_filtered} ({ai_filtered/total_processed*100:.1f}%)")
-    print(f"  Quality filter: {quality_filtered} ({quality_filtered/total_processed*100:.1f}%)")
+    print(f"  🚪 Preselect filter: {preselect_filtered} ({preselect_filtered/total_processed*100:.1f}%)")
+    print(f"  📋 Rule-based filter: {rule_filtered} ({rule_filtered/total_processed*100:.1f}%)")
+    # AI toxic filter final rejection stats removed
+    print(f"  ⭐ Quality filter: {quality_filtered} ({quality_filtered/total_processed*100:.1f}%)")
+    print(f"  🎯 Category filter: {category_filtered} ({category_filtered/total_processed*100:.1f}%)")
     
     print(f"\n📊 Final category distribution:")
+    category_emojis = {'function_calling': '📞', 'reasoning': '🧠', 'roleplay': '🎭', 'rag': '💬', 'uncategorized': '❓'}
     for cat, count in category_counts.items():
         if count > 0:
-            print(f"  {cat}: {count} ({count/total_processed*100:.1f}%)")
-    print(f"\n⚠️  Final inappropriate content breakdown:")
-    sorted_inap = sorted(inappropriate_counts.items(), key=lambda x: x[1], reverse=True)
-    for cat, count in sorted_inap:
-        if count > 0:
-            print(f"  {cat}: {count} ({count/total_processed*100:.1f}%)")
+            emoji = category_emojis.get(cat, '📄')
+            print(f"  {emoji} {cat}: {count} ({count/total_processed*100:.1f}%)")
+    # Final inappropriate content breakdown removed
 
-    # AI preselection final summary
-    if ENABLE_AI_PRESELECT and llama_improvement_scores:
-        print(f"\n🦙 LLAMA IMPROVEMENT ANALYSIS:")
-        print(f"🎯 Total high-potential samples: {len(high_potential_samples)}")
-        print(f"📈 Average improvement potential by category:")
-        for cat, scores in llama_improvement_scores.items():
-            if scores:
-                avg_potential = np.mean(scores)
-                print(f"  {cat}: {avg_potential:.3f} (lower Llama scores = higher improvement potential)")
-        
-        # Show top high-potential samples
-        if high_potential_samples:
-            print(f"\n🔥 TOP HIGH-POTENTIAL SAMPLES FOR LLAMA TRAINING:")
-            high_potential_samples.sort(key=lambda x: x['improvement_potential'], reverse=True)
-            for i, sample in enumerate(high_potential_samples[:3]):
-                print(f"\n  Sample {i+1} (Category: {sample['category']}):")
-                print(f"    Improvement potential: {sample['improvement_potential']:.3f}")
-                print(f"    Llama scores: {sample['llama_scores']}")
-                print(f"    Text preview: {sample['text']}")
+
 
     # --- Output 5 examples that pass all filters and their category scores ---
     print("\n--- 5 Examples Passing All Filters ---")
     passing = [r for r in filtered_results if r['should_include']]
     def category_score(text, category):
-        # Count pattern matches for each category
+        # Improved category scoring with weighted patterns
         patterns = PRESELECT_CATEGORIES[category]
         text_lower = text.lower()
-        return sum(text_lower.count(pat) for pat in patterns)
+        score = 0
+        for pattern in patterns:
+            if pattern in text_lower:
+                # Weight longer patterns more heavily and count occurrences
+                pattern_weight = len(pattern.split())
+                occurrences = text_lower.count(pattern)
+                score += pattern_weight * occurrences
+        return score
     for idx, r in enumerate(passing[:5]):
         print(f"\nExample {idx+1}:")
         print(f"Text: {r['text'][:200]}{'...' if len(r['text']) > 200 else ''}")
         print(f"Preselect category: {r['preselect_category']}")
-        print(f"Inappropriate categories: {r['inappropriate_categories']}")
+        # inappropriate_categories output removed
         print("Category scores:")
         for cat in PRESELECT_CATEGORIES:
             score = category_score(r['text'], cat)
@@ -1842,28 +1786,26 @@ def main():
             bart_filter = BartFilter()
             
             # Verification System
-            verification_system = None
-            if llama_analyzer:
-                verification_system = VerificationSystem(llama_analyzer)
-                
-                # Create some mock analysis results for baseline
-                mock_analysis = []
-                for result in filtered_results[:min(10, len(filtered_results))]:
-                    mock_result = {
-                        'category_scores': {
-                            'roleplay': 0.5,
-                            'reasoning': 0.6,
-                            'function_calling': 0.4,
-                            'rag': 0.5
-                        }
+            verification_system = VerificationSystem()
+            
+            # Create some mock analysis results for baseline
+            mock_analysis = []
+            for result in filtered_results[:min(10, len(filtered_results))]:
+                mock_result = {
+                    'category_scores': {
+                        'roleplay': 0.5,
+                        'reasoning': 0.6,
+                        'function_calling': 0.4,
+                        'rag': 0.5
                     }
-                    mock_analysis.append(mock_result)
-                
-                if mock_analysis:
-                    verification_system.establish_baseline(mock_analysis)
+                }
+                mock_analysis.append(mock_result)
+            
+            if mock_analysis:
+                verification_system.establish_baseline(mock_analysis)
             
             # Dataset Exporter
-            exporter = DatasetExporter(export_dir="filtered_data_advanced")
+            exporter = DatasetExporter(export_dir="filtered_data_advanced", clear_previous=CLEAR_PREVIOUS_FILES)
             
             # Demonstrate BART classification on first few samples
             print("\n🎯 BART Classification Results:")
@@ -1903,7 +1845,6 @@ def main():
                         'quality_score': result.get('overall_quality', 0.0),
                         'filter_results': {
                             'rule_based': result.get('rule_based', {}),
-                            'ai_based': result.get('ai_based', {}),
                             'quality': result.get('quality', {})
                         },
                         'timestamp': datetime.now().isoformat()
@@ -1927,6 +1868,55 @@ def main():
     
     else:
         print("\n⚠️ No samples passed all filters, skipping advanced features demonstration.")
+    
+    # --- EXPORT CATEGORY-SPECIFIC TRAINING DATASETS ---
+    if cleared_all_filters > 0:
+        print("\n" + "="*60)
+        print("📚 EXPORTING CATEGORY-SPECIFIC TRAINING DATASETS")
+        print("="*60)
+        
+        # Initialize category training dataset exporter
+        category_exporter = DatasetExporter(export_dir="category_training_datasets", clear_previous=CLEAR_PREVIOUS_FILES)
+        
+        # Export category-specific training datasets
+        exported_files = category_exporter.export_category_training_datasets(
+        filtered_results, 
+        export_mode=EXPORT_MODE,
+        save_function_calling=SAVE_FUNCTION_CALLING,
+        save_reasoning=SAVE_REASONING,
+        save_roleplay=SAVE_ROLEPLAY,
+        save_chatrag=SAVE_CHATRAG,
+        save_combined=SAVE_COMBINED,
+        save_summary=SAVE_SUMMARY
+    )
+        
+        print(f"\n🎯 TRAINING DATASETS CREATED FOR YOUR 4 TARGET CATEGORIES:")
+        print(f"Your goal: Train a model that excels at these 4 categories")
+        print(f"📁 Export directory: category_training_datasets/")
+        
+        for category, filepath in exported_files.items():
+            if category != 'combined':
+                print(f"  📄 {category}_training_TIMESTAMP.jsonl")
+        
+        if exported_files.get('combined'):
+            print(f"  📄 all_categories_training_TIMESTAMP.jsonl (combined)")
+        
+        print(f"\n💡 NEXT STEPS:")
+        print(f"1. Use these training files to fine-tune your model")
+        print(f"2. Each file contains samples that passed all quality filters")
+        print(f"3. Files are in JSONL format ready for training pipelines")
+        print(f"4. Compare with your target datasets:")
+        print(f"   - Function calling: https://huggingface.co/datasets/data4elm/ELMB-FunctionCalling")
+        print(f"   - Reasoning: https://huggingface.co/datasets/data4elm/ELMB-Reasoning")
+        print(f"   - Roleplay: https://huggingface.co/datasets/data4elm/ELMB-RolePlay") 
+        print(f"   - ChatRAG: https://huggingface.co/datasets/data4elm/ELMB-ChatRAG")
+        
+        print(f"\n🚀 OPTIMAL WORKFLOW FOR YOUR GOAL:")
+        print(f"Step 1: Get more raw data")
+        print(f"   python token_detokenizer_jason.py --max_samples 50000")
+        print(f"Step 2: Filter into categories") 
+        print(f"   python pir_jason.py (this script)")
+        print(f"Step 3: Train your model on the category-specific datasets")
 
 if __name__ == "__main__":
     main()
