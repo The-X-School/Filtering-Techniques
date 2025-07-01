@@ -1,0 +1,12 @@
+VOCAB_SIZE: 64005
+TOKENIZER_DIR: neo/scripts/tokenizer.model
+MEGATRON_CHECKPOINT_PATH: /workspace/checkpoints
+HF_CHECKPOINT_PATH: /workspace/hf_ckpt
+SEQ_LEN: 8192
+GB: 640
+BF16: true
+
+# The batch conversion script will automatically find the checkpoint closest to the set value for conversion based on the following values you set. 
+CKPTS_TO_KEEP_BY_BILLIONS_OF_TOKENS:
+  - 10
+  - 10000

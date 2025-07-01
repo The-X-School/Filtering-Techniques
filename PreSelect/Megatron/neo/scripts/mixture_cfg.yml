@@ -1,0 +1,13 @@
+GLOBAL_BATCH_SIZE: 1024
+SEQ_LEN: 8192
+
+0.5_ROUND:
+  - /workspace/dataset/example/mmap/example_text_document.bin
+
+1_ROUND:
+  - /workspace/dataset/example/mmap/example_text_document.bin
+
+2_ROUND:
+  - /workspace/dataset/example/mmap/example_text_document.bin
+
+

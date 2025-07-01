@@ -1,0 +1,30 @@
+#!/bin/bash
+
+HOME_PATH="/home"
+export FASTTEXT_NAME=$1
+FILTER=$2
+TOKENIZE=$3
+TRAIN=$4
+CONVERT=$5
+EVALUATE=$6
+NODE_ADDRESS=$7
+export VARIENT_NAME=$8
+LABEL_NAME=$9
+PERCENTAGE_THRESHOLD=${10}
+export HDFS_PATH=${11}
+N_NODE=${12}
+TRAINING_STEPS=${13}
+NODE_RANK=${14}
+
+
+# your node id ARNOLD_ID
+NODE_ID=$ARNOLD_ID
+
+# check wether node is main node or child node
+if [ "$NODE_ID" -eq 0 ]; then
+    echo "Running on node 0"
+    bash pipeline.sh ${FASTTEXT_NAME} ${FILTER} ${TOKENIZE} ${TRAIN} ${CONVERT} ${EVALUATE} ${NODE_ADDRESS} ${VARIENT_NAME} ${LABEL_NAME} ${PERCENTAGE_THRESHOLD} ${HDFS_PATH} ${N_NODE} ${TRAINING_STEPS}
+else
+    echo "Running on node $NODE_ID"
+    bash pipeline_child.sh ${FASTTEXT_NAME} ${FILTER} ${TOKENIZE} ${TRAIN} ${CONVERT} ${EVALUATE} ${NODE_ADDRESS} ${VARIENT_NAME} ${LABEL_NAME} ${PERCENTAGE_THRESHOLD} ${HDFS_PATH} ${N_NODE} ${TRAINING_STEPS} ${NODE_ID}
+fi
