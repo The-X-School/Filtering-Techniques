@@ -3,12 +3,14 @@ from urllib.parse import urlparse
 import ndjson
 
 id2model2loss = {}
-model_list = ["Llama-400M-12b"]
+model_list = ["Llama-400M-12L"]
 
+result_path = "/bpc_calculation_results/"
+data_path = "/bpc_calculation_16/"
 
 for i in range(0,len(model_list)):
     for j in range(0,1):
-        with open(f"./bpc_calculation_results/{model_list[i]}/{j}.json", "r") as f:
+        with open(f"result_path{model_list[i]}/{j}.json", "r") as f:
             for line in f:
                 data = json.loads(line)
                 if data["id"] not in id2model2loss:
@@ -23,7 +25,7 @@ id2charnum = {}
 id2url = {}
 for i in range(0,16):
 
-    with open(f"./bpc_calculation_16/{i}.json", "r") as f:
+    with open(f"data_path{i}.json", "r") as f:
         for line in f:
             data = json.loads(line)
             if data["id"] not in id2charnum:
@@ -61,6 +63,12 @@ for i in range(0,16):
 #                                     },                                  
 # }
 
+model2benchmark = {
+    "Llama-400M-12L": {
+        "avg": 75
+    }
+}
+
 TASK="avg"
 id2score = {}
 for id in id2model2loss.keys():
@@ -78,6 +86,8 @@ for id in id2model2loss.keys():
                 if id2model2loss[id][model_list[i]] > id2model2loss[id][model_list[j]]:
                     score += 1
     id2score[id] = score
+
+sorted_id2score = sorted(id2score.items(), key=lambda x: x[1], reverse=True)
 
 correct_order_id = []
 wrong_order_id = []
@@ -102,7 +112,7 @@ for i in range(0, len(sorted_id2score)):
 all_data = {}
 for i in range(0,1):
 
-    with open(f"./bpc_calculation_16/{i}.json", "r") as f:
+    with open(f"data_path{i}.json", "r") as f:
         for line in f:
             data = json.loads(line)
             if data["id"] not in all_data:

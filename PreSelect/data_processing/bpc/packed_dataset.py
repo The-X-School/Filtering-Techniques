@@ -8,7 +8,7 @@ import math
 import json
 
 class EvalDataset(Dataset):
-    def __init__(self, args, task_name, block_size, stride, tokenizer, cluster, file_num=-1, dtype="auto", vocab_size=None):
+    def __init__(self, args, task_name, block_size, stride, tokenizer, cluster, part, file_num=-1, dtype="auto", vocab_size=None):
         self.args = args
         self.task_name = task_name
         self.block_size = block_size
@@ -43,7 +43,7 @@ class EvalDataset(Dataset):
 
         self._raw_dataset = []
         count = 0
-        with open(f"/home/bpc_calculation_16/{self.cluster}.json", "r") as f:
+        with open(f"/workspace/preselect_training_data/{self.cluster}.json", "r") as f:
             for line in f:
                 data = json.loads(line)
                 if len(data["text"]) > 0:

@@ -58,7 +58,7 @@ def validate(args, model,val_dataset, val_dataloader: DataLoader, device):
                 output = {}
                 output["id"] = val_dataset.ids[len(example_total_losses) - 1]
                 output["Model"] = args.model_name
-                output["total_loss"] = example_total_losses[-1]
+                output["total_loss"] = float(example_total_losses[-1])
                 output["part"] = args.part
                 f.write(json.dumps(output))
                 f.write("\n")
