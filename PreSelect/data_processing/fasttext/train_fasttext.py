@@ -3,11 +3,11 @@ from urllib.parse import urlparse
 import ndjson
 
 id2model2loss = {}
-model_list = ["llama-7b", "Llama-2-7b-hf", "llama-13b", "Llama-2-13b-hf", "llama-30b", "llama-65b"]
+model_list = ["Llama-400M-12b"]
 
 
 for i in range(0,len(model_list)):
-    for j in range(0,16):
+    for j in range(0,1):
         with open(f"./bpc_calculation_results/{model_list[i]}/{j}.json", "r") as f:
             for line in f:
                 data = json.loads(line)
@@ -28,10 +28,6 @@ for i in range(0,16):
             data = json.loads(line)
             if data["id"] not in id2charnum:
                 id2charnum[data["id"]] = len(data["text"])
-            else:
-                raise ValueError("Duplicate ID")
-            if data["id"] not in id2url:
-                id2url[data["id"]] = urlparse(data["url"]).netloc
             else:
                 raise ValueError("Duplicate ID")
 
@@ -104,7 +100,7 @@ for i in range(0, len(sorted_id2score)):
 
 
 all_data = {}
-for i in range(0,16):
+for i in range(0,1):
 
     with open(f"./bpc_calculation_16/{i}.json", "r") as f:
         for line in f:

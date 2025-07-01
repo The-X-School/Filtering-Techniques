@@ -115,6 +115,7 @@ def main():
     parser.add_argument("--gpu", type=int, default=0)
     parser.add_argument("--cache_dir", type=str, default=None)
     parser.add_argument("--part", type=int)
+    parser.add_argument("--cluster", type=str)
     args = parser.parse_args()
     print(args)
     device = torch.device(f"cuda:{args.gpu}" if torch.cuda.is_available() else "cpu")
@@ -142,7 +143,8 @@ def main():
         stride=args.stride,
         vocab_size=tokenizer.vocab_size,
         file_num=args.file_num,
-        part=args.part
+        part=args.part,
+        cluster=args.cluster
     )
     valdataloader = DataLoader(valdataset, batch_size=args.batch_size, shuffle=False)
     total_loss, all_losses = validate(args, model, valdataset,valdataloader, device)
