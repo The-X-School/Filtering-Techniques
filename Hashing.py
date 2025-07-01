@@ -17,13 +17,9 @@ class TextDeduplicator:
         self.similarity_threshold = similarity_threshold
         self.num_perm = num_perm
         self.min_text_length = min_text_length
-
-        # Initialize LSH
         self.lsh = MinHashLSH(threshold=similarity_threshold, num_perm=num_perm)
         self.exact_hashes: Set[str] = set()
         self.deduplicated_samples: List[Dict[str, Any]] = []
-
-        # Text preprocessing regex
         self.text_cleaner = re.compile(r'\s+')
 
     def preprocess_text(self, text: str) -> str:
