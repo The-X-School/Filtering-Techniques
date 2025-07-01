@@ -48,7 +48,7 @@ extract_filtered_data_tool = CustomExtractDataTool()
 # --- Rest of your processing code (remains largely the same) ---
 
 # Path to input file
-input_path = "climblab_sample.jsonl"
+input_path = "climblab_samples/00001.jsonl"
 output_path = "data/filtered_dataset/tinyagent_output.jsonl" 
 
 # Ensure output directory exists
