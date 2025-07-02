@@ -1,12 +1,15 @@
+# clone git repository
+git clone https://github.com/The-X-School/Filtering-Techniques
+cd Filtering-Techniques
+git checkout lindsey
+cd PreSelect
+
 # build docker image
 sudo docker build -t preselect:latest .
-sudo docker run --gpus all --network host -it --shm-size=20g --privileged \ -v /home/ubuntu/PreSelect:/workspace \ preselect:latest
+sudo docker run --gpus all --network host -it --shm-size=20g --privileged -v /home/ubuntu/Filtering-Techniques:/workspace preselect:latest
 
 # activate conda environment
 conda activate lm-eval
-
-# install packages
-pip install accelerate ndjson
 
 # run bpc calculation
 cd data_processing/bpc

@@ -6,7 +6,7 @@ id2model2loss = {}
 model_list = ["Llama-400M-12L"]
 
 result_path = "/bpc_calculation_results/"
-data_path = "/bpc_calculation_16/"
+data_path = "/workspace/preselect_training_data/preselect_training_data.json"
 
 for i in range(0,len(model_list)):
     for j in range(0,1):
@@ -23,9 +23,9 @@ for i in range(0,len(model_list)):
 
 id2charnum = {}
 id2url = {}
-for i in range(0,16):
+for i in range(0,1):
 
-    with open(f"data_path{i}.json", "r") as f:
+    with open(f"data_path.json", "r") as f:
         for line in f:
             data = json.loads(line)
             if data["id"] not in id2charnum:
