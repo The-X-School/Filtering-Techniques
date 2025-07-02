@@ -1,170 +1,238 @@
-import torch 
-from transformers import AutoTokenizer, AutoModel, AutoConfig
-from torch.optim import AdamW
+import os
+import numpy as np
 from datasets import load_dataset
+from transformers import AutoTokenizer, AutoModel, get_linear_schedule_with_warmup
+from huggingface_hub import login
+import warnings
 import json
-from tqdm import tqdm
+import torch
 import torch.nn.functional as F
+from torch.utils.data import DataLoader, Dataset
+from sentence_transformers import SentenceTransformer
 from peft import get_peft_model, LoraConfig, TaskType
+import random
 
-dataset = load_dataset("nvidia/ClimbLab", split="train", streaming=True)
-dora_dataset = load_dataset("data4elm/ELMB-FunctionCalling", split="train", streaming=True)
-tokenizer = AutoTokenizer.from_pretrained('nvidia/NV-Retriever-v1', trust_remote_code=True)
+warnings.filterwarnings("ignore")
+os.environ["TORCH_LOGS"] = "0"
+os.environ["PYTORCH_MPS_HIGH_WATERMARK_RATIO"] = "0.0"
 
+sample_size = 10
+output_path = "data/embeddings/dora_finetuned_embeddings.json"
+model_name = 'nvidia/NV-Embed-v2'
+dora_dataset = 'data4elm/ELMB-FunctionCalling'
+decoder_tokenizer = "microsoft/DialoGPT-medium"
+cache_dir = "./cache"
+search_top_k = 3
+test_query = "call a function"
 
+num_epochs = 3
+learning_rate = 2e-5
+batch_size = 8
+max_length = 512
 
-config = AutoConfig.from_pretrained("nvidia/NV-Retriever-v1", trust_remote_code=True)
-config._attn_implementation = "eager"
-
-model = AutoModel.from_pretrained(
-    "nvidia/NV-Retriever-v1",
-    config=config,
-    trust_remote_code=True,
-    torch_dtype="auto"
-)
-
+login()
 dora_config = LoraConfig(
-    task_type=TaskType.FEATURE_EXTRACTION,
     r=16,
     lora_alpha=32,
     target_modules=["q_proj", "v_proj", "k_proj", "o_proj"],
     lora_dropout=0.1,
+    bias="none",
     use_dora=True,
+    task_type=TaskType.FEATURE_EXTRACTION
 )
 
-model = get_peft_model(model, dora_config)
-model.train()
+print(f"Loading base model: {model_name}...")
+base_model = AutoModel.from_pretrained(model_name, trust_remote_code=True)
+tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print("Applying DoRA to the model...")
+model = get_peft_model(base_model, dora_config)
+model.print_trainable_parameters()
+class ContrastiveDataset(Dataset):
+    def __init__(self, data, tokenizer, max_length=512):
+        self.data = data
+        self.tokenizer = tokenizer
+        self.max_length = max_length
+    
+    def __len__(self):
+        return len(self.data)
+    
+    def __getitem__(self, idx):
+        item = self.data[idx]
+        
+        query = item.get('query', item.get('instruction', ''))
+        positive = item.get('positive', item.get('response', ''))
+        
+        neg_idx = random.randint(0, len(self.data) - 1)
+        while neg_idx == idx:
+            neg_idx = random.randint(0, len(self.data) - 1)
+        negative = self.data[neg_idx].get('positive', self.data[neg_idx].get('response', ''))
+        
+        query_tokens = self.tokenizer(query, truncation=True, padding='max_length', 
+                                    max_length=self.max_length, return_tensors='pt')
+        pos_tokens = self.tokenizer(positive, truncation=True, padding='max_length',
+                                  max_length=self.max_length, return_tensors='pt')
+        neg_tokens = self.tokenizer(negative, truncation=True, padding='max_length',
+                                  max_length=self.max_length, return_tensors='pt')
+        
+        return {
+            'query': {k: v.squeeze(0) for k, v in query_tokens.items()},
+            'positive': {k: v.squeeze(0) for k, v in pos_tokens.items()},
+            'negative': {k: v.squeeze(0) for k, v in neg_tokens.items()}
+        }
+
+def get_embeddings(model, input_dict):
+    outputs = model(**input_dict)
+    embeddings = outputs.last_hidden_state.mean(dim=1)
+    return F.normalize(embeddings, p=2, dim=1)
+
+def contrastive_loss(query_emb, pos_emb, neg_emb, temperature=0.05):
+    pos_sim = torch.sum(query_emb * pos_emb, dim=1) / temperature
+    neg_sim = torch.sum(query_emb * neg_emb, dim=1) / temperature
+    
+    logits = torch.stack([pos_sim, neg_sim], dim=1)
+    labels = torch.zeros(logits.size(0), dtype=torch.long, device=logits.device)
+    
+    return F.cross_entropy(logits, labels)
+
+print("Loading datasets...")
+dataset = load_dataset("nvidia/ClimbLab", streaming=True, cache_dir=cache_dir)
+dora_datasets = load_dataset(dora_dataset, streaming=True, cache_dir=cache_dir)
+
+print("Preparing training data...")
+sample = list(dataset["train"].take(sample_size))
+dora_sample = list(dora_datasets["train"].take(sample_size))
+
+temp_tokenizer = AutoTokenizer.from_pretrained(decoder_tokenizer)
+training_data = []
+
+for row in sample:
+    if "tokens" in row:
+        text = temp_tokenizer.decode(row["tokens"], skip_special_tokens=True)
+    else:
+        text = row.get("text", "")
+    
+    sentences = text.split('. ')
+    if len(sentences) >= 2:
+        training_data.append({
+            'query': sentences[0],
+            'positive': '. '.join(sentences[1:])
+        })
+
+for row in dora_sample:
+    training_data.append({
+        'query': row.get('instruction', row.get('query', '')),
+        'positive': row.get('response', row.get('answer', ''))
+    })
+
+print(f"Created {len(training_data)} training examples")
+
+train_dataset = ContrastiveDataset(training_data, tokenizer, max_length)
+train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+
+optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
+num_training_steps = len(train_loader) * num_epochs
+scheduler = get_linear_schedule_with_warmup(
+    optimizer, num_warmup_steps=0, num_training_steps=num_training_steps
+)
+
+print("Starting DoRA fine-tuning...")
+model.train()
+device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
 model.to(device)
 
-optimizer = AdamW(model.parameters(), lr=5e-5)
-batch_size = 4
-num_epochs = 3
-
-def prepare_batch(examples):
-    texts = []     
-    
-    for ex in examples:         
-        parts = []
-        
-        if "question" in ex and ex["question"]:
-            parts.append(f"Question: {ex['question']}")
-        
-        if "correct_answer_content" in ex and ex["correct_answer_content"]:
-            parts.append(f"Answer: {ex['correct_answer_content']}")
-        if "ability" in ex and ex["ability"]:
-            parts.append(f"Ability: {ex['ability']}")
-        
-        if parts:
-            text_content = " ".join(parts)
-            texts.append(f"passage: {text_content}")
-        else:
-            print(f"Warning: No suitable content found in example: {list(ex.keys())}")
-    
-    # print(f"Prepared {len(texts)} texts from {len(examples)} examples")
-    return texts
-
-dora_dataset_size = 24200
-num_batches = dora_dataset_size // batch_size
-
 for epoch in range(num_epochs):
-    shuffled_dataset = dora_dataset.shuffle(buffer_size=10000, seed=epoch)
-    batch_iterator = shuffled_dataset.iter(batch_size=batch_size)
-    progress_bar = tqdm(batch_iterator, total=num_batches, desc=f"Epoch {epoch+1}/{num_epochs}")
-
-    for batch_dict in progress_bar:
-        batch_examples = [dict(zip(batch_dict, t)) for t in zip(*batch_dict.values())]
-        texts = prepare_batch(batch_examples)
-        
-        if not texts:
-            print(f"Skipping batch because no valid texts were prepared.")
-            continue
-        
-        inputs = tokenizer(texts, padding=True, truncation=True, return_tensors='pt', max_length=512)
-        inputs = {k: v.to(device) for k, v in inputs.items()}
-        
+    total_loss = 0
+    for batch_idx, batch in enumerate(train_loader):
         optimizer.zero_grad()
         
-        outputs = model(**inputs)
+        query_inputs = {k: v.to(device) for k, v in batch['query'].items()}
+        pos_inputs = {k: v.to(device) for k, v in batch['positive'].items()}
+        neg_inputs = {k: v.to(device) for k, v in batch['negative'].items()}
         
-        if hasattr(outputs, 'last_hidden_state'):
-            embeddings = outputs.last_hidden_state[:, 0]
-        elif isinstance(outputs, torch.Tensor):
-            embeddings = outputs
-        elif isinstance(outputs, tuple):
-            embeddings = outputs[0]
-        else:
-            raise TypeError(f"Unsupported model output type: {type(outputs)}")
-
-        if embeddings.dim() == 3 and embeddings.shape[1] > 1:
-             embeddings = embeddings[:, 0]
+        query_emb = get_embeddings(model, query_inputs)
+        pos_emb = get_embeddings(model, pos_inputs)
+        neg_emb = get_embeddings(model, neg_inputs)
         
-        if embeddings.dim() == 1:
-            embeddings = embeddings.unsqueeze(0)
-            
-        embeddings_norm = F.normalize(embeddings, p=2, dim=1)
-        
-        similarity_matrix = torch.matmul(embeddings_norm, embeddings_norm.T)
-        labels = torch.arange(similarity_matrix.size(0)).to(device)
-        
-        loss = F.cross_entropy(similarity_matrix * 20, labels)
+        loss = contrastive_loss(query_emb, pos_emb, neg_emb)
         
         loss.backward()
         optimizer.step()
-        progress_bar.set_postfix(loss=loss.item())
-
-model.save_pretrained("./nv_retriever_dora_finetuned")
-
-def tokens_to_text(tokens):
-    return tokenizer.decode(tokens, skip_special_tokens=True)
-
-texts = []
-max_samples = 10
-for i, example in enumerate(dataset):
-    if i >= max_samples: 
-        break
+        scheduler.step()
         
-    if "tokens" in example:
-        text = tokens_to_text(example["tokens"])
-    elif "text" in example:
-        text = example["text"]
-    else:
-        continue
+        total_loss += loss.item()
+        
+        if batch_idx % 10 == 0:
+            print(f"Epoch {epoch+1}/{num_epochs}, Batch {batch_idx}, Loss: {loss.item():.4f}")
     
-    texts.append(f"passage: {text}")
+    avg_loss = total_loss / len(train_loader)
+    print(f"Epoch {epoch+1} completed. Average Loss: {avg_loss:.4f}")
 
+print("Fine-tuning completed!")
+
+model.save_pretrained("./dora_finetuned_model")
+print("DoRA fine-tuned model saved to ./dora_finetuned_model")
+
+print("Generating embeddings with fine-tuned model...")
 model.eval()
-embeddings = []
+docs = []
+for row in sample[:10]:
+    if "tokens" in row:
+        docs.append(temp_tokenizer.decode(row["tokens"], skip_special_tokens=True))
+    else:
+        docs.append(row.get("text", ""))
 
+embeddings_list = []
 with torch.no_grad():
-    for i in range(0, len(texts), batch_size):
-        batch_texts = texts[i:i+batch_size]
-        batch = tokenizer(batch_texts, padding=True, truncation=True, return_tensors='pt', max_length=512)
-        batch = {k: v.to(device) for k, v in batch.items()}
-        batch_emb = model(**batch)
-        
-        if hasattr(batch_emb, 'last_hidden_state'):
-            embeddings_tensor = batch_emb.last_hidden_state[:, 0]
-        elif isinstance(batch_emb, torch.Tensor):
-            embeddings_tensor = batch_emb
-        elif isinstance(batch_emb, tuple):
-            embeddings_tensor = batch_emb[0]
-        else:
-            raise TypeError(f"Unsupported model output type: {type(batch_emb)}")
+    for doc in docs:
+        inputs = tokenizer(doc, truncation=True, padding=True, max_length=max_length, return_tensors='pt')
+        inputs = {k: v.to(device) for k, v in inputs.items()}
+        embedding = get_embeddings(model, inputs)
+        embeddings_list.append(embedding.cpu().numpy())
 
-        if embeddings_tensor.dim() == 3 and embeddings_tensor.shape[1] > 1:
-            embeddings_tensor = embeddings_tensor[:, 0]
+embeddings_np = np.vstack(embeddings_list)
+print(f"Generated embeddings with shape: {embeddings_np.shape}")
 
-        if embeddings_tensor.dim() == 1:
-            embeddings_tensor = embeddings_tensor.unsqueeze(0)
-        
-        embeddings.append(embeddings_tensor.cpu())
+if output_path:
+    print(f"Saving artifacts to {output_path}...")
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    embeddings_file = output_path.replace('.json', '_embeddings.npy')
+    np.save(embeddings_file, embeddings_np)
+    
+    with open(output_path, 'w') as f:
+        data = {
+            'texts': docs,
+            'embedding_shape': embeddings_np.shape,
+            'embedding_file': embeddings_file,
+            'model_used': f"{model_name}_dora_finetuned",
+            'training_samples': len(training_data),
+            'epochs': num_epochs
+        }
+        json.dump(data, f, indent=2)
+    print(f"Embeddings saved to {embeddings_file}")
+    print(f"Metadata saved to {output_path}")
+    
+if docs:
+    print(f"\n--- Searching with DoRA fine-tuned model: '{test_query}' ---")
+    query_inputs = tokenizer(test_query, truncation=True, padding=True, max_length=max_length, return_tensors='pt')
+    query_inputs = {k: v.to(device) for k, v in query_inputs.items()}
+    
+    with torch.no_grad():
+        query_embedding = get_embeddings(model, query_inputs).cpu().numpy()
+    
+    similarities = np.dot(embeddings_np, query_embedding.T).flatten()
+    top_indices = np.argsort(similarities)[::-1][:search_top_k]
 
-embeddings = torch.cat(embeddings, dim=0)
-embeddings_list = embeddings.tolist()
+    results = []
+    for i, idx in enumerate(top_indices):
+        results.append({
+            'rank': i + 1,
+            'text': docs[idx],
+            'similarity': float(similarities[idx])
+        })
 
-with open("climblab_nv_retriever_dora_embeddings.jsonl", "w") as f:
-    for i, embedding in enumerate(embeddings_list):
-        json.dump({"id": i, "embedding": embedding}, f)
-        f.write("\n")
+    for result in results:
+        print(f"\nRank {result['rank']}: Similarity={result['similarity']:.3f}")
+        print(f"Preview: {result['text'][:200]}...")
+
+print("\n--- DoRA Fine-tuning Script Finished ---")
