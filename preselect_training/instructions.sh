@@ -15,6 +15,7 @@ conda activate lm-eval
 pip install accelerate ndjson fasttext
 
 # run bpc calculation
+# cluster is the path to the data
 cd data_processing/bpc
 python -u main.py\
     --model_name data4elm/Llama-400M-12L\
