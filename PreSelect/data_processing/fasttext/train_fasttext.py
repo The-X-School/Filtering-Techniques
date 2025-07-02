@@ -97,13 +97,15 @@ correct_order_id = []
 wrong_order_id = []
 
 for i in range(0, len(sorted_id2score)):
-    if sorted_id2score[i][1] == 15:
+    if sorted_id2score[i][1] == 1:
         correct_order_id.append(sorted_id2score[i][0])
+
+print("correct amount: ", len(correct_order_id))
 
 # for i in range(0,len(correct_order_id)):
 
 for i in range(0, len(sorted_id2score)):
-    for j in range(0,15):
+    for j in range(0,1):
         if sorted_id2score[i][1] == j:
             wrong_order_id.append(sorted_id2score[i][0])
         if len(wrong_order_id) == len(correct_order_id):
@@ -116,7 +118,7 @@ for i in range(0, len(sorted_id2score)):
 all_data = {}
 for i in range(0,1):
 
-    with open(f"data_path{i}.json", "r") as f:
+    with open(data_path, "r") as f:
         for line in f:
             data = json.loads(line)
             if data["id"] not in all_data:
