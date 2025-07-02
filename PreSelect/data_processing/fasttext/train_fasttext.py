@@ -1,16 +1,20 @@
 import json
 from urllib.parse import urlparse
 import ndjson
+import os
 
 id2model2loss = {}
 model_list = ["Llama-400M-12L"]
 
-result_path = "/bpc_calculation_results/"
-data_path = "/workspace/preselect_training_data/preselect_training_data.json"
+result_path = "/workspace/preselect_training/bpc_calculation_results/"
+data_path = "/workspace/preselect_training/preselect_training_data.jsonl"
 
 for i in range(0,len(model_list)):
     for j in range(0,1):
-        with open(f"result_path{model_list[i]}/{j}.json", "r") as f:
+        model_dir = os.path.join(result_path, model_list[i])
+        result_file = os.path.join(model_dir, f"{j}.jsonl")
+        os.makedirs(model_dir, exist_ok=True)
+        with open(result_file, "r") as f:
             for line in f:
                 data = json.loads(line)
                 if data["id"] not in id2model2loss:
@@ -25,7 +29,7 @@ id2charnum = {}
 id2url = {}
 for i in range(0,1):
 
-    with open(f"data_path.json", "r") as f:
+    with open(data_path, "r") as f:
         for line in f:
             data = json.loads(line)
             if data["id"] not in id2charnum:
