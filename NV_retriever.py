@@ -1,350 +1,238 @@
 import os
-import torch
 import numpy as np
-from datasets import load_dataset, Dataset
-from transformers import AutoTokenizer, AutoModel
+from datasets import load_dataset
+from transformers import AutoTokenizer, AutoModel, get_linear_schedule_with_warmup
 from huggingface_hub import login
 import warnings
 import json
-import gc
-import re
-from typing import List, Dict, Any, Tuple, Optional
+import torch
+import torch.nn.functional as F
+from torch.utils.data import DataLoader, Dataset
+from sentence_transformers import SentenceTransformer
+from peft import get_peft_model, LoraConfig, TaskType
+import random
 
 warnings.filterwarnings("ignore")
 os.environ["TORCH_LOGS"] = "0"
+os.environ["PYTORCH_MPS_HIGH_WATERMARK_RATIO"] = "0.0"
 
-class FunctionCallingRetriever:
-    """
-    Specialized retriever for function calling content from the ClimbLab dataset.
-    Filters, embeds, and retrieves function calling-relevant documents.
-    """
-    
-    def __init__(self):
-        """Initialize the function calling retriever"""
-        self.function_calling_patterns = self._compile_function_calling_patterns()
-        self.model = None
-        self.embeddings = None
-        self.texts = None
-        self.function_scores = None
-        
-    def _compile_function_calling_patterns(self) -> List[Tuple[re.Pattern, str, int]]:
-        """
-        Compile regex patterns specifically for detecting function calling content
-        """
-        patterns = [
-            # Voice assistant commands
-            (re.compile(r'\b(?:hey\s+(?:siri|alexa|google)|ok\s+google|alexa)', re.IGNORECASE), 
-             "Voice assistant wake words", 10),
-            
-            # Function/method calls
-            (re.compile(r'\w+\s*\([^)]*\)', re.IGNORECASE), 
-             "Function calls with parentheses", 8),
-            
-            # API calls and endpoints
-            (re.compile(r'\b(?:GET|POST|PUT|DELETE|PATCH)\s+[/\w\-\.]+', re.IGNORECASE), 
-             "HTTP API calls", 9),
-            
-            # Command patterns
-            (re.compile(r'\b(?:execute|run|call|invoke|trigger|activate)\s+\w+', re.IGNORECASE), 
-             "Command execution patterns", 7),
-            
-            # Mobile device actions
-            (re.compile(r'\b(?:turn\s+on|turn\s+off|set|open|close|start|stop)\s+(?:the\s+)?\w+', re.IGNORECASE), 
-             "Device control commands", 8),
-            
-            # Programming function definitions
-            (re.compile(r'\b(?:def|function|func|method)\s+\w+\s*\(', re.IGNORECASE), 
-             "Function definitions", 9),
-            
-            # JSON-RPC and API patterns
-            (re.compile(r'\{[^}]*"method"\s*:\s*"[^"]*"[^}]*\}', re.IGNORECASE), 
-             "JSON-RPC method calls", 10),
-            
-            # Tool/library function calls
-            (re.compile(r'\b(?:requests|fetch|axios|curl)\.\w+\(', re.IGNORECASE), 
-             "HTTP library calls", 8),
-            
-            # Smart home commands
-            (re.compile(r'\b(?:lights?|thermostat|door|window|alarm|camera)\b', re.IGNORECASE), 
-             "Smart home devices", 6),
-            
-            # Programming keywords
-            (re.compile(r'\b(?:import|from|require|include)\s+\w+', re.IGNORECASE), 
-             "Module imports", 5),
-        ]
-        return patterns
-    
-    def calculate_function_calling_score(self, text: str) -> float:
-        """
-        Calculate how relevant a text is to function calling
-        """
-        if not text:
-            return 0.0
-        
-        total_score = 0
-        text_length = len(text)
-        
-        for pattern, description, weight in self.function_calling_patterns:
-            matches = len(pattern.findall(text))
-            if matches > 0:
-                total_score += matches * weight
-        
-        # Normalize by text length to avoid bias toward longer texts
-        normalized_score = total_score / (text_length / 1000) if text_length > 0 else 0
-        return min(normalized_score, 100.0)  # Cap at 100
-    
-    def filter_function_calling_content(self, docs: List[str], min_score: float = 5.0) -> Tuple[List[str], List[float]]:
-        """
-        Filter documents to keep only those relevant to function calling
-        """
-        filtered_docs = []
-        scores = []
-        
-        for doc in docs:
-            score = self.calculate_function_calling_score(doc)
-            if score >= min_score:
-                filtered_docs.append(doc)
-                scores.append(score)
-        
-        return filtered_docs, scores
+sample_size = 10
+output_path = "data/embeddings/dora_finetuned_embeddings.json"
+model_name = 'nvidia/NV-Embed-v2'
+dora_dataset = 'data4elm/ELMB-FunctionCalling'
+decoder_tokenizer = "microsoft/DialoGPT-medium"
+cache_dir = "./cache"
+search_top_k = 3
+test_query = "call a function"
 
-def generate_function_calling_embeddings(sample_size=1000, target_tokens=None, output_path=None, 
-                                       min_function_score=5.0, use_function_calling_model=True):
-    """
-    Loads the ClimbLab dataset, filters for function calling content, and generates specialized embeddings.
-    
-    Args:
-        sample_size: Number of documents to sample initially (used if target_tokens is None)
-        target_tokens: Target number of tokens to process (overrides sample_size)
-        output_path: Optional path to save the embeddings and texts
-        min_function_score: Minimum function calling relevance score to keep documents
-        use_function_calling_model: Whether to use a model optimized for code/function calling
-    
-    Returns:
-        tuple: (embeddings_np, texts, function_scores, token_count)
-    """
-    login()
-    
-    # Initialize function calling retriever
-    retriever = FunctionCallingRetriever()
+num_epochs = 3
+learning_rate = 2e-5
+batch_size = 8
+max_length = 512
 
-    # --- 1. Load Model ---
-    print("Loading embedding model optimized for function calling...")
-    os.system("pip install -q sentence-transformers")
-    from sentence_transformers import SentenceTransformer
+login()
+dora_config = LoraConfig(
+    r=16,
+    lora_alpha=32,
+    target_modules=["q_proj", "v_proj", "k_proj", "o_proj"],
+    lora_dropout=0.1,
+    bias="none",
+    use_dora=True,
+    task_type=TaskType.FEATURE_EXTRACTION
+)
+
+print(f"Loading base model: {model_name}...")
+base_model = AutoModel.from_pretrained(model_name, trust_remote_code=True)
+tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
+
+print("Applying DoRA to the model...")
+model = get_peft_model(base_model, dora_config)
+model.print_trainable_parameters()
+class ContrastiveDataset(Dataset):
+    def __init__(self, data, tokenizer, max_length=512):
+        self.data = data
+        self.tokenizer = tokenizer
+        self.max_length = max_length
     
-    if use_function_calling_model:
-        # Use a code-aware model for better function calling embeddings
-        model_name = 'microsoft/codebert-base'
-        print(f"Loading code-aware embedding model: {model_name}")
-        try:
-            model = SentenceTransformer(model_name)
-        except:
-            # Fallback to general model
-            print("Falling back to general embedding model...")
-            model = SentenceTransformer('all-MiniLM-L6-v2')
+    def __len__(self):
+        return len(self.data)
+    
+    def __getitem__(self, idx):
+        item = self.data[idx]
+        
+        query = item.get('query', item.get('instruction', ''))
+        positive = item.get('positive', item.get('response', ''))
+        
+        neg_idx = random.randint(0, len(self.data) - 1)
+        while neg_idx == idx:
+            neg_idx = random.randint(0, len(self.data) - 1)
+        negative = self.data[neg_idx].get('positive', self.data[neg_idx].get('response', ''))
+        
+        query_tokens = self.tokenizer(query, truncation=True, padding='max_length', 
+                                    max_length=self.max_length, return_tensors='pt')
+        pos_tokens = self.tokenizer(positive, truncation=True, padding='max_length',
+                                  max_length=self.max_length, return_tensors='pt')
+        neg_tokens = self.tokenizer(negative, truncation=True, padding='max_length',
+                                  max_length=self.max_length, return_tensors='pt')
+        
+        return {
+            'query': {k: v.squeeze(0) for k, v in query_tokens.items()},
+            'positive': {k: v.squeeze(0) for k, v in pos_tokens.items()},
+            'negative': {k: v.squeeze(0) for k, v in neg_tokens.items()}
+        }
+
+def get_embeddings(model, input_dict):
+    outputs = model(**input_dict)
+    embeddings = outputs.last_hidden_state.mean(dim=1)
+    return F.normalize(embeddings, p=2, dim=1)
+
+def contrastive_loss(query_emb, pos_emb, neg_emb, temperature=0.05):
+    pos_sim = torch.sum(query_emb * pos_emb, dim=1) / temperature
+    neg_sim = torch.sum(query_emb * neg_emb, dim=1) / temperature
+    
+    logits = torch.stack([pos_sim, neg_sim], dim=1)
+    labels = torch.zeros(logits.size(0), dtype=torch.long, device=logits.device)
+    
+    return F.cross_entropy(logits, labels)
+
+print("Loading datasets...")
+dataset = load_dataset("nvidia/ClimbLab", streaming=True, cache_dir=cache_dir)
+dora_datasets = load_dataset(dora_dataset, streaming=True, cache_dir=cache_dir)
+
+print("Preparing training data...")
+sample = list(dataset["train"].take(sample_size))
+dora_sample = list(dora_datasets["train"].take(sample_size))
+
+temp_tokenizer = AutoTokenizer.from_pretrained(decoder_tokenizer)
+training_data = []
+
+for row in sample:
+    if "tokens" in row:
+        text = temp_tokenizer.decode(row["tokens"], skip_special_tokens=True)
     else:
-        print("Loading general embedding model: all-MiniLM-L6-v2")
-        model = SentenceTransformer('all-MiniLM-L6-v2')
-
-    # --- 2. Load and Sample Dataset ---
-    dataset = load_dataset("nvidia/ClimbLab", streaming=True, cache_dir="./cache")
+        text = row.get("text", "")
     
-    if target_tokens:
-        print(f"Loading documents to reach target of {target_tokens:,} tokens from nvidia/ClimbLab...")
-        sample = []
-        total_tokens = 0
+    sentences = text.split('. ')
+    if len(sentences) >= 2:
+        training_data.append({
+            'query': sentences[0],
+            'positive': '. '.join(sentences[1:])
+        })
+
+for row in dora_sample:
+    training_data.append({
+        'query': row.get('instruction', row.get('query', '')),
+        'positive': row.get('response', row.get('answer', ''))
+    })
+
+print(f"Created {len(training_data)} training examples")
+
+train_dataset = ContrastiveDataset(training_data, tokenizer, max_length)
+train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+
+optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
+num_training_steps = len(train_loader) * num_epochs
+scheduler = get_linear_schedule_with_warmup(
+    optimizer, num_warmup_steps=0, num_training_steps=num_training_steps
+)
+
+print("Starting DoRA fine-tuning...")
+model.train()
+device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+model.to(device)
+
+for epoch in range(num_epochs):
+    total_loss = 0
+    for batch_idx, batch in enumerate(train_loader):
+        optimizer.zero_grad()
         
-        for row in dataset["train"]:
-            # Count tokens in this document
-            if "tokens" in row:
-                doc_tokens = len(row["tokens"])
-            else:
-                # Fallback: estimate tokens as roughly 0.75 * word count
-                text = row.get("text", "")
-                doc_tokens = int(len(text.split()) * 0.75)
-            
-            sample.append(row)
-            total_tokens += doc_tokens
-            
-            if total_tokens >= target_tokens:
-                print(f"Reached target tokens: {total_tokens:,} tokens with {len(sample)} documents")
-                break
+        query_inputs = {k: v.to(device) for k, v in batch['query'].items()}
+        pos_inputs = {k: v.to(device) for k, v in batch['positive'].items()}
+        neg_inputs = {k: v.to(device) for k, v in batch['negative'].items()}
+        
+        query_emb = get_embeddings(model, query_inputs)
+        pos_emb = get_embeddings(model, pos_inputs)
+        neg_emb = get_embeddings(model, neg_inputs)
+        
+        loss = contrastive_loss(query_emb, pos_emb, neg_emb)
+        
+        loss.backward()
+        optimizer.step()
+        scheduler.step()
+        
+        total_loss += loss.item()
+        
+        if batch_idx % 10 == 0:
+            print(f"Epoch {epoch+1}/{num_epochs}, Batch {batch_idx}, Loss: {loss.item():.4f}")
+    
+    avg_loss = total_loss / len(train_loader)
+    print(f"Epoch {epoch+1} completed. Average Loss: {avg_loss:.4f}")
+
+print("Fine-tuning completed!")
+
+model.save_pretrained("./dora_finetuned_model")
+print("DoRA fine-tuned model saved to ./dora_finetuned_model")
+
+print("Generating embeddings with fine-tuned model...")
+model.eval()
+docs = []
+for row in sample[:10]:
+    if "tokens" in row:
+        docs.append(temp_tokenizer.decode(row["tokens"], skip_special_tokens=True))
     else:
-        print(f"Loading and sampling {sample_size} items from nvidia/ClimbLab...")
-        sample = list(dataset["train"].take(sample_size))
+        docs.append(row.get("text", ""))
 
-    # Convert token arrays to text for processing
-    docs = []
-    for row in sample:
-        if "tokens" in row:
-            # Try to decode tokens if available
-            try:
-                # Use a simple tokenizer for decoding
-                from transformers import AutoTokenizer
-                temp_tokenizer = AutoTokenizer.from_pretrained("microsoft/DialoGPT-medium")
-                text = temp_tokenizer.decode(row["tokens"], skip_special_tokens=True)
-                docs.append(text)
-            except:
-                # Fallback: join tokens as string
-                docs.append(" ".join(map(str, row["tokens"])))
-        else:
-            # Use text field if available
-            text = row.get("text", "")
-            docs.append(text)
-    
-    print(f"Processed {len(docs)} documents from dataset.")
+embeddings_list = []
+with torch.no_grad():
+    for doc in docs:
+        inputs = tokenizer(doc, truncation=True, padding=True, max_length=max_length, return_tensors='pt')
+        inputs = {k: v.to(device) for k, v in inputs.items()}
+        embedding = get_embeddings(model, inputs)
+        embeddings_list.append(embedding.cpu().numpy())
 
-    # --- 3. Filter for Function Calling Content ---
-    print(f"Filtering for function calling content (min_score: {min_function_score})...")
-    filtered_docs, function_scores = retriever.filter_function_calling_content(docs, min_function_score)
-    
-    if not filtered_docs:
-        print("⚠️ No documents passed the function calling filter! Lowering threshold...")
-        filtered_docs, function_scores = retriever.filter_function_calling_content(docs, min_function_score * 0.5)
-    
-    print(f"Kept {len(filtered_docs)} documents after function calling filtering")
-    print(f"Function calling scores range: {min(function_scores):.2f} - {max(function_scores):.2f}")
-    print(f"Average function calling score: {np.mean(function_scores):.2f}")
+embeddings_np = np.vstack(embeddings_list)
+print(f"Generated embeddings with shape: {embeddings_np.shape}")
 
-    # --- 4. Generate Embeddings ---
-    print("Generating embeddings for function calling content...")
-    embeddings_np = model.encode(filtered_docs, convert_to_numpy=True)
-    print(f"Generated embeddings with shape: {embeddings_np.shape}")
+if output_path:
+    print(f"Saving artifacts to {output_path}...")
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    embeddings_file = output_path.replace('.json', '_embeddings.npy')
+    np.save(embeddings_file, embeddings_np)
     
-    # Calculate total token count for filtered documents
-    total_tokens = 0
-    for doc in filtered_docs:
-        # Estimate tokens as roughly 0.75 * word count
-        total_tokens += int(len(doc.split()) * 0.75)
+    with open(output_path, 'w') as f:
+        data = {
+            'texts': docs,
+            'embedding_shape': embeddings_np.shape,
+            'embedding_file': embeddings_file,
+            'model_used': f"{model_name}_dora_finetuned",
+            'training_samples': len(training_data),
+            'epochs': num_epochs
+        }
+        json.dump(data, f, indent=2)
+    print(f"Embeddings saved to {embeddings_file}")
+    print(f"Metadata saved to {output_path}")
     
-    print(f"Total tokens in function calling content: {total_tokens:,}")
-
-    # --- 5. Save if requested ---
-    if output_path:
-        print(f"Saving function calling embeddings and texts to {output_path}")
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
-        
-        # Save embeddings as numpy array
-        embeddings_file = output_path.replace('.json', '_function_calling_embeddings.npy')
-        np.save(embeddings_file, embeddings_np)
-        
-        # Save texts and metadata
-        with open(output_path, 'w') as f:
-            data = {
-                'texts': filtered_docs,
-                'function_scores': function_scores,
-                'token_count': total_tokens,
-                'embedding_shape': embeddings_np.shape,
-                'embedding_file': embeddings_file,
-                'min_function_score': min_function_score,
-                'original_doc_count': len(docs),
-                'filtered_doc_count': len(filtered_docs),
-                'retention_rate': len(filtered_docs) / len(docs) * 100,
-                'model_used': model_name if use_function_calling_model else 'all-MiniLM-L6-v2'
-            }
-            json.dump(data, f, indent=2)
-        
-        print(f"Function calling embeddings saved to {embeddings_file}")
-        print(f"Metadata saved to {output_path}")
-        print(f"Retention rate: {len(filtered_docs) / len(docs) * 100:.2f}%")
+if docs:
+    print(f"\n--- Searching with DoRA fine-tuned model: '{test_query}' ---")
+    query_inputs = tokenizer(test_query, truncation=True, padding=True, max_length=max_length, return_tensors='pt')
+    query_inputs = {k: v.to(device) for k, v in query_inputs.items()}
     
-    return embeddings_np, filtered_docs, function_scores, total_tokens
-
-def load_function_calling_embeddings(metadata_path):
-    """
-    Load previously generated function calling embeddings and texts.
+    with torch.no_grad():
+        query_embedding = get_embeddings(model, query_inputs).cpu().numpy()
     
-    Args:
-        metadata_path: Path to the metadata JSON file
-    
-    Returns:
-        tuple: (embeddings_np, texts, function_scores, token_count)
-    """
-    with open(metadata_path, 'r') as f:
-        metadata = json.load(f)
-    
-    embeddings_np = np.load(metadata['embedding_file'])
-    texts = metadata['texts']
-    function_scores = metadata['function_scores']
-    token_count = metadata['token_count']
-    
-    print(f"Loaded {len(texts)} function calling documents")
-    print(f"Retention rate was: {metadata.get('retention_rate', 0):.2f}%")
-    
-    return embeddings_np, texts, function_scores, token_count
-
-def search_function_calling_content(query: str, embeddings_np: np.ndarray, texts: List[str], 
-                                  function_scores: List[float], top_k: int = 5, 
-                                  model_name: str = 'all-MiniLM-L6-v2') -> List[Dict[str, Any]]:
-    """
-    Search for function calling content similar to the query.
-    
-    Args:
-        query: Search query
-        embeddings_np: Precomputed embeddings
-        texts: Corresponding texts
-        function_scores: Function calling relevance scores
-        top_k: Number of top results to return
-        model_name: Name of the embedding model to use for query encoding
-    
-    Returns:
-        List of dictionaries with search results
-    """
-    from sentence_transformers import SentenceTransformer
-    
-    # Load the same model used for document embeddings
-    model = SentenceTransformer(model_name)
-    
-    # Encode the query
-    query_embedding = model.encode([query], convert_to_numpy=True)
-    
-    # Calculate cosine similarities
     similarities = np.dot(embeddings_np, query_embedding.T).flatten()
-    
-    # Get top-k indices
-    top_indices = np.argsort(similarities)[::-1][:top_k]
-    
-    # Prepare results
+    top_indices = np.argsort(similarities)[::-1][:search_top_k]
+
     results = []
     for i, idx in enumerate(top_indices):
         results.append({
             'rank': i + 1,
-            'text': texts[idx],
-            'similarity': float(similarities[idx]),
-            'function_score': function_scores[idx],
-            'text_length': len(texts[idx]),
-            'preview': texts[idx][:200] + "..." if len(texts[idx]) > 200 else texts[idx]
+            'text': docs[idx],
+            'similarity': float(similarities[idx])
         })
-    
-    return results
 
-if __name__ == '__main__':
-    # Function calling-specific test
-    print("🔧 Running Function Calling Retriever Test...")
-    print("=" * 60)
-    
-    embeddings, texts, function_scores, token_count = generate_function_calling_embeddings(
-        sample_size=500,  # Using moderate sample for testing
-        output_path="data/embeddings/function_calling_embeddings.json",
-        min_function_score=3.0,  # Lower threshold for testing
-        use_function_calling_model=True
-    )
-    if len(texts) > 0:
-        test_queries = [
-            "call a function",
-            "API endpoint",
-            "execute command",
-            "voice assistant",
-            "smart home control"
-        ]
-        
-        for query in test_queries[:2]:  # Test first 2 queries
-            print(f"\nQuery: '{query}'")
-            results = search_function_calling_content(
-                query, embeddings, texts, function_scores, top_k=3
-            )
-            for result in results:
-                print(f"  Rank {result['rank']}: Similarity={result['similarity']:.3f}, "
-                      f"Function Score={result['function_score']:.2f}")
-                print(f"  Preview: {result['preview']}")
+    for result in results:
+        print(f"\nRank {result['rank']}: Similarity={result['similarity']:.3f}")
+        print(f"Preview: {result['text'][:200]}...")
+
+print("\n--- DoRA Fine-tuning Script Finished ---")
