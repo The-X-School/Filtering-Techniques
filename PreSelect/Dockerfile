@@ -23,5 +23,5 @@ RUN conda create -n datatrove python=3.10 -y \
 
 RUN conda create -n lm-eval python=3.10 -y \
     && source activate lm-eval \
-    && pip install datasets==2.19.0 transformers==4.41.2 tqdm torch==2.3.0 wandb numpy sentencepiece accelerate ndjson -i https://pypi.tuna.tsinghua.edu.cn/simple \
+    && pip install datasets==2.19.0 transformers==4.41.2 tqdm torch==2.3.0 wandb numpy sentencepiece accelerate ndjson fasttext -i https://pypi.tuna.tsinghua.edu.cn/simple \
     && source deactivate

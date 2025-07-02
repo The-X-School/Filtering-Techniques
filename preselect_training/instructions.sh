@@ -1,5 +1,5 @@
 # clone git repository
-git clone https://github.com/The-X-School/Filtering-Techniques
+git clone https://github.com/The-X-School/Filtering-Techniques.git
 cd Filtering-Techniques
 git checkout lindsey
 cd PreSelect
@@ -10,6 +10,9 @@ sudo docker run --gpus all --network host -it --shm-size=20g --privileged -v /ho
 
 # activate conda environment
 conda activate lm-eval
+
+# install packages if necessary
+pip install accelerate ndjson fasttext
 
 # run bpc calculation
 cd data_processing/bpc
@@ -22,5 +25,5 @@ python -u main.py\
     --cluster preselect_training_data
 
 # train fasttext
-cd data_processing/fasttext
+cd ../fasttext
 python train_fasttext.py
