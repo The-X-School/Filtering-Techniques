@@ -2,7 +2,6 @@ import json
 import argparse
 import os
 
-
 def jsonl_to_json(jsonl_path, json_path):
     data = []
     with open(jsonl_path, 'r', encoding='utf-8') as f:
@@ -24,6 +23,8 @@ def json_to_jsonl(json_path, jsonl_path):
             f.write(json.dumps(item, ensure_ascii=False) + '\n')
     print(f"Converted {json_path} to {jsonl_path}")
 
+# python json_to_jsonl.py data.json data.jsonl
+# python json_to_jsonl.py data.jsonl data.json
 
 def main():
     parser = argparse.ArgumentParser(description="Convert between JSON and JSONL formats.")
