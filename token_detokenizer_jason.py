@@ -5,7 +5,7 @@ from huggingface_hub import login
 HF_TOKEN = "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"
 login(token=HF_TOKEN)
 OUTPUT_PATH = "climblab_detokenized.json"
-MAX_SAMPLES = 50
+MAX_SAMPLES = 10000
 BATCH_SIZE = 10
 tokenizer = GPT2Tokenizer.from_pretrained("gpt2", use_fast=True)
 def detokenize_batch(batch_data):
