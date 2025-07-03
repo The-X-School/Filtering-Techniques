@@ -6,9 +6,10 @@ def format(input_file, output_file):
         for line in infile:
             try:
                 data = json.loads(line)
-                text = data.get("text", "")
-                outfile.write(text)
-                print(f"extracted text: {text}")
+                text = data.get("text")
+                if text is not None:
+                    json.dump({"text": text}, outfile)
+                    outfile.write("\n")
             except json.JSONDecodeError as e:
                 print(f"Skipping invalid JSON line: {e}")
     print(f"formatted {input_file} into {output_file}")
