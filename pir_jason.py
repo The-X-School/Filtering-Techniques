@@ -154,4 +154,4 @@ def pir_filter_dataset(dataset_name=None, input_path="climblab_detokenized.json"
         print(f"  {category}: {count}")
 
 if __name__ == "__main__":
-    pir_filter_dataset(max_samples=100)
+    pir_filter_dataset(max_samples=1000)
