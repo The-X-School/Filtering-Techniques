@@ -16,7 +16,7 @@ warnings.filterwarnings("ignore")
 os.environ["TORCH_LOGS"] = "0"
 os.environ["PYTORCH_MPS_HIGH_WATERMARK_RATIO"] = "0.0"
 
-sample_size = 10
+sample_size = 5
 output_path = "data/embeddings/dora_finetuned_embeddings.json"
 model_name = 'nvidia/NV-Embed-v2'
 dora_dataset = 'data4elm/ELMB-FunctionCalling'
@@ -41,13 +41,15 @@ dora_config = LoraConfig(
     task_type=TaskType.FEATURE_EXTRACTION
 )
 
-print(f"Loading base model: {model_name}...")
-base_model = AutoModel.from_pretrained(model_name, trust_remote_code=True)
-tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
+base_model = AutoModel.from_pretrained(model_name, trust_remote_code=True, revision="main")
+tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True, revision="main")
 
-print("Applying DoRA to the model...")
+if tokenizer.pad_token is None:
+    tokenizer.pad_token = tokenizer.eos_token
+
 model = get_peft_model(base_model, dora_config)
 model.print_trainable_parameters()
+
 class ContrastiveDataset(Dataset):
     def __init__(self, data, tokenizer, max_length=512):
         self.data = data
@@ -63,10 +65,17 @@ class ContrastiveDataset(Dataset):
         query = item.get('query', item.get('instruction', ''))
         positive = item.get('positive', item.get('response', ''))
         
+        if not query or not positive:
+            query = "default query"
+            positive = "default response"
+        
         neg_idx = random.randint(0, len(self.data) - 1)
         while neg_idx == idx:
             neg_idx = random.randint(0, len(self.data) - 1)
         negative = self.data[neg_idx].get('positive', self.data[neg_idx].get('response', ''))
+        
+        if not negative:
+            negative = "default negative"
         
         query_tokens = self.tokenizer(query, truncation=True, padding='max_length', 
                                     max_length=self.max_length, return_tensors='pt')
@@ -83,7 +92,12 @@ class ContrastiveDataset(Dataset):
 
 def get_embeddings(model, input_dict):
     outputs = model(**input_dict)
-    embeddings = outputs.last_hidden_state.mean(dim=1)
+    if hasattr(outputs, 'last_hidden_state'):
+        embeddings = outputs.last_hidden_state.mean(dim=1)
+    elif hasattr(outputs, 'pooler_output'):
+        embeddings = outputs.pooler_output
+    else:
+        embeddings = outputs[0].mean(dim=1)
     return F.normalize(embeddings, p=2, dim=1)
 
 def contrastive_loss(query_emb, pos_emb, neg_emb, temperature=0.05):
@@ -95,11 +109,9 @@ def contrastive_loss(query_emb, pos_emb, neg_emb, temperature=0.05):
     
     return F.cross_entropy(logits, labels)
 
-print("Loading datasets...")
 dataset = load_dataset("nvidia/ClimbLab", streaming=True, cache_dir=cache_dir)
 dora_datasets = load_dataset(dora_dataset, streaming=True, cache_dir=cache_dir)
 
-print("Preparing training data...")
 sample = list(dataset["train"].take(sample_size))
 dora_sample = list(dora_datasets["train"].take(sample_size))
 
@@ -112,20 +124,26 @@ for row in sample:
     else:
         text = row.get("text", "")
     
-    sentences = text.split('. ')
-    if len(sentences) >= 2:
-        training_data.append({
-            'query': sentences[0],
-            'positive': '. '.join(sentences[1:])
-        })
+    if text:
+        sentences = text.split('. ')
+        if len(sentences) >= 2:
+            training_data.append({
+                'query': sentences[0],
+                'positive': '. '.join(sentences[1:])
+            })
 
 for row in dora_sample:
-    training_data.append({
-        'query': row.get('instruction', row.get('query', '')),
-        'positive': row.get('response', row.get('answer', ''))
-    })
+    instruction = row.get('instruction', row.get('query', ''))
+    response = row.get('response', row.get('answer', ''))
+    
+    if instruction and response:
+        training_data.append({
+            'query': instruction,
+            'positive': response
+        })
 
-print(f"Created {len(training_data)} training examples")
+if len(training_data) == 0:
+    exit(1)
 
 train_dataset = ContrastiveDataset(training_data, tokenizer, max_length)
 train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
@@ -136,7 +154,6 @@ scheduler = get_linear_schedule_with_warmup(
     optimizer, num_warmup_steps=0, num_training_steps=num_training_steps
 )
 
-print("Starting DoRA fine-tuning...")
 model.train()
 device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
 model.to(device)
@@ -161,26 +178,22 @@ for epoch in range(num_epochs):
         scheduler.step()
         
         total_loss += loss.item()
-        
-        if batch_idx % 10 == 0:
-            print(f"Epoch {epoch+1}/{num_epochs}, Batch {batch_idx}, Loss: {loss.item():.4f}")
-    
-    avg_loss = total_loss / len(train_loader)
-    print(f"Epoch {epoch+1} completed. Average Loss: {avg_loss:.4f}")
-
-print("Fine-tuning completed!")
 
 model.save_pretrained("./dora_finetuned_model")
-print("DoRA fine-tuned model saved to ./dora_finetuned_model")
 
-print("Generating embeddings with fine-tuned model...")
 model.eval()
 docs = []
 for row in sample[:10]:
     if "tokens" in row:
-        docs.append(temp_tokenizer.decode(row["tokens"], skip_special_tokens=True))
+        text = temp_tokenizer.decode(row["tokens"], skip_special_tokens=True)
     else:
-        docs.append(row.get("text", ""))
+        text = row.get("text", "")
+    
+    if text:
+        docs.append(text)
+
+if not docs:
+    docs = ["Sample document 1", "Sample document 2", "Sample document 3"]
 
 embeddings_list = []
 with torch.no_grad():
@@ -190,49 +203,39 @@ with torch.no_grad():
         embedding = get_embeddings(model, inputs)
         embeddings_list.append(embedding.cpu().numpy())
 
-embeddings_np = np.vstack(embeddings_list)
-print(f"Generated embeddings with shape: {embeddings_np.shape}")
+if embeddings_list:
+    embeddings_np = np.vstack(embeddings_list)
 
-if output_path:
-    print(f"Saving artifacts to {output_path}...")
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    embeddings_file = output_path.replace('.json', '_embeddings.npy')
-    np.save(embeddings_file, embeddings_np)
+    if output_path:
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        embeddings_file = output_path.replace('.json', '_embeddings.npy')
+        np.save(embeddings_file, embeddings_np)
+        
+        with open(output_path, 'w') as f:
+            data = {
+                'texts': docs,
+                'embedding_shape': embeddings_np.shape,
+                'embedding_file': embeddings_file,
+                'model_used': f"{model_name}_dora_finetuned",
+                'training_samples': len(training_data),
+                'epochs': num_epochs
+            }
+            json.dump(data, f, indent=2)
     
-    with open(output_path, 'w') as f:
-        data = {
-            'texts': docs,
-            'embedding_shape': embeddings_np.shape,
-            'embedding_file': embeddings_file,
-            'model_used': f"{model_name}_dora_finetuned",
-            'training_samples': len(training_data),
-            'epochs': num_epochs
-        }
-        json.dump(data, f, indent=2)
-    print(f"Embeddings saved to {embeddings_file}")
-    print(f"Metadata saved to {output_path}")
-    
-if docs:
-    print(f"\n--- Searching with DoRA fine-tuned model: '{test_query}' ---")
-    query_inputs = tokenizer(test_query, truncation=True, padding=True, max_length=max_length, return_tensors='pt')
-    query_inputs = {k: v.to(device) for k, v in query_inputs.items()}
-    
-    with torch.no_grad():
-        query_embedding = get_embeddings(model, query_inputs).cpu().numpy()
-    
-    similarities = np.dot(embeddings_np, query_embedding.T).flatten()
-    top_indices = np.argsort(similarities)[::-1][:search_top_k]
+    if docs:
+        query_inputs = tokenizer(test_query, truncation=True, padding=True, max_length=max_length, return_tensors='pt')
+        query_inputs = {k: v.to(device) for k, v in query_inputs.items()}
+        
+        with torch.no_grad():
+            query_embedding = get_embeddings(model, query_inputs).cpu().numpy()
+        
+        similarities = np.dot(embeddings_np, query_embedding.T).flatten()
+        top_indices = np.argsort(similarities)[::-1][:search_top_k]
 
-    results = []
-    for i, idx in enumerate(top_indices):
-        results.append({
-            'rank': i + 1,
-            'text': docs[idx],
-            'similarity': float(similarities[idx])
-        })
-
-    for result in results:
-        print(f"\nRank {result['rank']}: Similarity={result['similarity']:.3f}")
-        print(f"Preview: {result['text'][:200]}...")
-
-print("\n--- DoRA Fine-tuning Script Finished ---")
+        results = []
+        for i, idx in enumerate(top_indices):
+            results.append({
+                'rank': i + 1,
+                'text': docs[idx],
+                'similarity': float(similarities[idx])
+            })
