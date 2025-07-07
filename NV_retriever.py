@@ -234,5 +234,3 @@ if docs:
     for result in results:
         print(f"\nRank {result['rank']}: Similarity={result['similarity']:.3f}")
         print(f"Preview: {result['text'][:200]}...")
-
-print("\n--- DoRA Fine-tuning Script Finished ---")

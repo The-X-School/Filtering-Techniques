@@ -1,58 +1,59 @@
-def simple_reward_function(text_samples, quality_threshold=0.2, length_min=50, length_max=2000, fc_weight=1.0):
-    if not text_samples:
+from datasets import load_dataset
+def accuracy_reward_function(predictions, ground_truth):
+    """
+    Accuracy-based reward function: R = (1/N) * Σ(I(ŷᵢ = yᵢ))
+    Args:
+        predictions: List of model predictions (strings)
+        ground_truth: List of ground truth answers (strings)
+    Returns:
+        Float reward score between 0 and 1 (accuracy)
+    """
+    if not predictions or not ground_truth:
         return 0.0
-    fc_patterns = ['function', 'call', 'api', 'execute', 'def', '(', ')', '=', 'return']
-    
-    filtered_samples = []
-    total_score = 0.0
-    
-    for text in text_samples:
-        if len(text) < length_min or len(text) > length_max:
-            continue
-            
-        words = text.lower().split()
-        if not words:
-            continue
-            
-        length_score = min(1.0, len(text) / 500)
-        
-        unique_words = set(words)
-        vocab_diversity = len(unique_words) / len(words)
-        
-        fc_matches = sum(1 for pattern in fc_patterns if pattern in text.lower())
-        fc_score = min(1.0, fc_matches / len(fc_patterns))
-        
-        quality_score = (
-            length_score * 0.3 +
-            vocab_diversity * 0.4 + 
-            fc_score * fc_weight * 0.3
-        )
-        
-        if quality_score >= quality_threshold:
-            filtered_samples.append(text)
-            total_score += quality_score
-    
-    if len(filtered_samples) < 3:
-        return 0.0
-    
-    avg_score = total_score / len(filtered_samples)
-    size_bonus = min(0.2, len(filtered_samples) / 100)
-    
-    return min(1.0, avg_score + size_bonus)
+    if len(predictions) != len(ground_truth):
+        raise ValueError("Predictions and ground truth must have the same length")
+    N = len(predictions)
+    correct_predictions = sum(pred == true_label for pred, true_label in zip(predictions, ground_truth))
+    return correct_predictions / N
 
+def get_elmb_questions_and_answers(split="train", num_samples=None):
+    """
+    Loads the ELMB-Reasoning dataset and returns questions and correct answers.
+    Args:
+        split: Dataset split to use ("train", "test", etc.)
+        num_samples: If set, only return this many samples
+    Returns:
+        questions: List of question strings
+        answers: List of correct answer strings
+    """
+    ds = load_dataset("data4elm/ELMB-Reasoning", split=split)
+    if num_samples:
+        ds = ds.select(range(num_samples))
+    questions = ds["question"]
+    answers = ds["answer"]
+    return questions, answers
 
 if __name__ == "__main__":
-    sample_texts = [
-        "def call_api(endpoint, params): return requests.get(endpoint, params=params)",
-        "Execute database query with parameters: db.execute('SELECT * FROM users')",
-        "This is just regular text without any special patterns",
-        "function() method call with arguments and return values",
-        "Short text",
-        "API function call example with error handling and response parsing"
-    ]
-    
-    reward = simple_reward_function(sample_texts)
-    print(f"Reward score: {reward:.3f}")
-    
-    reward2 = simple_reward_function(sample_texts, quality_threshold=0.1, fc_weight=2.0)
-    print(f"Reward score with different params: {reward2:.3f}") 
+    # Load questions and correct answers from ELMB-Reasoning
+    questions, ground_truth = get_elmb_questions_and_answers(num_samples=10)
+
+    # Simulate model predictions (for demonstration, use ground truth or random)
+    # In practice, replace this with your model's outputs
+    predictions = []
+    for q in questions:
+        # Example: echo the correct answer (perfect accuracy)
+        # Replace this with: model.generate(q)
+        predictions.append("dummy_prediction")  # Replace with actual model output
+
+    # For demonstration, let's use the correct answers as predictions (perfect accuracy)
+    # predictions = ground_truth
+
+    # Calculate accuracy
+    accuracy = accuracy_reward_function(predictions, ground_truth)
+    print(f"ELMB Function Calling Accuracy Reward: {accuracy:.3f}")
+
+    # Show a few examples
+    for i in range(min(3, len(questions))):
+        print(f"\nQ: {questions[i]}")
+        print(f"Model Prediction: {predictions[i]}")
+        print(f"Correct Answer: {ground_truth[i]}")
