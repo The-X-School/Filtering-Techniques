@@ -10,6 +10,7 @@ from packed_dataset import EvalDataset
 import numpy as np
 from tqdm import tqdm
 import json
+import os
 torch.set_printoptions(threshold=10_000)
 
 def cross_entropy(
@@ -54,7 +55,9 @@ def validate(args, model,val_dataset, val_dataloader: DataLoader, device):
             remain_len = curr_loss_len - val_dataset.token_lens[len(example_total_losses)]
             example_total_losses.append(curr_temp_loss + sum(loss[:len(loss)-remain_len]))
             dir_name = args.model_name.split("/")[-1]
-            with open(f"/workspace/preselect_training/bpc_calculation_results/{dir_name}/{args.part}.json", "a+") as f:
+            output_dir = f"/workspace/preselect_training/bpc_calculation_results/{dir_name}"
+            os.makedirs(output_dir, exist_ok=True)
+            with open(os.path.join(output_dir, f"{args.part}.jsonl"), "a+") as f:
                 output = {}
                 output["id"] = val_dataset.ids[len(example_total_losses) - 1]
                 output["Model"] = args.model_name

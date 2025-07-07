@@ -4,7 +4,7 @@ import ndjson
 import os
 
 id2model2loss = {}
-model_list = ["Llama-400M-12L", "llama-7b"]
+model_list = ["Llama-400M-12L", "TinyLlama-1.1B-Chat-v1.0", "llama-7b"]
 
 result_path = "/workspace/preselect_training/bpc_calculation_results/"
 data_path = "/workspace/preselect_training/preselect_training_data.jsonl"
@@ -67,9 +67,16 @@ for i in range(0,1):
 #                                     },                                  
 # }
 
+# add all models in model_list to this
 model2benchmark = {
     "Llama-400M-12L": {
         "avg": 75
+    },
+    "TinyLlama-1.1B-Chat-v1.0": {
+        "avg": 77
+    },
+    "llama-7b": {
+        "avg": 80
     }
 }
 
@@ -97,13 +104,13 @@ correct_order_id = []
 wrong_order_id = []
 
 for i in range(0, len(sorted_id2score)):
-    if sorted_id2score[i][1] == 1:
+    if sorted_id2score[i][1] == len(model_list) * (len(model_list) - 1) // 2:
         correct_order_id.append(sorted_id2score[i][0])
 
 # for i in range(0,len(correct_order_id)):
 
 for i in range(0, len(sorted_id2score)):
-    for j in range(0,len(model_list) * (len(model_list) - 1) / 2):
+    for j in range(0, len(model_list) * (len(model_list) - 1) // 2):
         if sorted_id2score[i][1] == j:
             wrong_order_id.append(sorted_id2score[i][0])
         if len(wrong_order_id) == len(correct_order_id):
