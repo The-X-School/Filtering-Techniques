@@ -43,7 +43,7 @@ class EvalDataset(Dataset):
 
         self._raw_dataset = []
         count = 0
-        with open(f"/workspace/preselect_training/{self.cluster}.jsonl", "r") as f:
+        with open(f"/workspace/Filtering-Techniques/preselect_training/{self.cluster}.jsonl", "r") as f:
             for line in f:
                 data = json.loads(line)
                 if len(data["text"]) > 0:

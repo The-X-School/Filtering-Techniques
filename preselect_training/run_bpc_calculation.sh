@@ -1,18 +1,17 @@
 #!/bin/bash
 
-models=("Llama-400M-12L" "llama-7b" "Llama-13B")
-parts=(0 1 2 3)
+models=("data4elm/Llama-400M-12L" "TinyLlama/TinyLlama-1.1B-Chat-v1.0" "huggyllama/llama-7b")
+parts=(0)
 
 for model in "${models[@]}"; do
   for part in "${parts[@]}"; do
     echo "Running $model part $part"
-    python -u .py \
-      --task_name your_task \
+    python -u /workspace/Filtering-Techniques/PreSelect/data_processing/bpc/main.py \
       --model_name $model \
       --block_size 1900 \
       --stride 512 \
       --batch_size 4 \
       --part $part \
-      --cluster your_cluster
+      --cluster stage2_10k_preselect
   done
 done
