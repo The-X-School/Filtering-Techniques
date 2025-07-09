@@ -55,7 +55,7 @@ def validate(args, model,val_dataset, val_dataloader: DataLoader, device):
             remain_len = curr_loss_len - val_dataset.token_lens[len(example_total_losses)]
             example_total_losses.append(curr_temp_loss + sum(loss[:len(loss)-remain_len]))
             dir_name = args.model_name.split("/")[-1]
-            output_dir = f"/workspace/preselect_training/bpc_calculation_results/{dir_name}"
+            output_dir = f"preselect_training/bpc_calculation_results/{dir_name}"
             os.makedirs(output_dir, exist_ok=True)
             with open(os.path.join(output_dir, f"{args.part}.jsonl"), "a+") as f:
                 output = {}

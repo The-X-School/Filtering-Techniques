@@ -6,8 +6,8 @@ import os
 id2model2loss = {}
 model_list = ["Llama-400M-12L", "TinyLlama-1.1B-Chat-v1.0", "llama-7b"]
 
-result_path = "/workspace/preselect_training/bpc_calculation_results/"
-data_path = "/workspace/preselect_training/preselect_training_data.jsonl"
+result_path = "preselect_training/bpc_calculation_results/"
+data_path = "preselect_training/stage2_10k_preselect.jsonl"
 
 for i in range(0,len(model_list)):
     for j in range(0,1):
@@ -154,7 +154,8 @@ model = fasttext.train_supervised(
     lr=0.1,
     wordNgrams=2,
 )
-
-model.save_model("./saved_fasttext_model.bin")
+save_path = "./saved_fasttext_model_10k.bin"
+model.save_model(save_path)
+print("FastText model saved at:", os.path.abspath(save_path))
 
 

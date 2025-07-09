@@ -11,7 +11,8 @@ sudo docker run --gpus all \
     -it \
     --shm-size=20g \
     --privileged \
-    -v /home/ubuntu/clyra/Filtering-Techniques:/workspace \
+    -u $(id -u):$(id -g) \
+    -v /home/ubuntu/clyra:/workspace \
     preselect:latest
 
 # activate conda environment

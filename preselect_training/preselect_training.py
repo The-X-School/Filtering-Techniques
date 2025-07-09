@@ -32,14 +32,15 @@ _tmp_dir = os.path.join(args.output_path, "_tmp")
 Path(_tmp_dir).mkdir(parents=True, exist_ok=True)
 
 # for pretrained fasttext, use model_path = "PreSelect-classifier.bin"
-model_path = "/workspace/PreSelect/data_processing/fasttext/saved_fasttext_model.bin"
+model_path = "saved_fasttext_model_10k.bin"
+print(f"Using FastText model: {model_path}")
 
 # set the threshold to 0.99
 dist_executor = LocalPipelineExecutor(
     skip_completed=True,
     pipeline=[
         JsonlReader(f"{args.input_path}", text_key="text", default_metadata= {}),
-        FastTextClassifierFilter(model_path, keep_labels=[("1",0.52)]), 
+        FastTextClassifierFilter(model_path, keep_labels=[("1",0.85)]), 
         JsonlWriter(_tmp_dir, compression=None)
     ],
     tasks=1,
