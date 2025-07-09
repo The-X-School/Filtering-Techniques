@@ -1,0 +1,41 @@
+PreSelect-classifier.bin
+
+# Large data directories
+climblab_samples/
+filtered_output/
+filtered_output_aggressive/
+filtered_preselect_15k/
+
+# Large data files
+merged_math_dataset.json
+*.jsonl
+data/*.jsonl
+data/climblab_sample_*.jsonl
+data/filtered_dataset/
+data/climblab_deduplicated_output/
+
+# Cache and temporary files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+.DS_Store
+*.log
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS generated files
+Thumbs.db
+ehthumbs.db
+Desktop.ini 
