@@ -52,10 +52,10 @@ def preprocess_and_label(rag_ds, triviaqa, max_samples_per_class=5000):
     # Progress bar for negatives
     trivia_texts = []
     for ex in tqdm(trivia_samples, desc="Preparing non-RAG negatives"):
-        if ex['search_results']:
-            trivia_texts.append(f"Context: {ex['search_results'][0]['search_context']} Question: {ex['question']} Answer: {ex['answer']}")
-        else:
-            trivia_texts.append(f"Question: {ex['question']} Answer: {ex['answer']}")
+        context = ""
+        if ex.get('search_results') and len(ex['search_results']) > 0 and 'search_context' in ex['search_results'][0]:
+            context = ex['search_results'][0]['search_context']
+        trivia_texts.append(f"Context: {context} Question: {ex['question']} Answer: {ex['answer']}")
     trivia_labels = [0] * len(trivia_texts)
     texts = rag_texts + trivia_texts
     labels = rag_labels + trivia_labels
