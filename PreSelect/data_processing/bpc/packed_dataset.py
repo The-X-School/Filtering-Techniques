@@ -43,24 +43,22 @@ class EvalDataset(Dataset):
 
         self._raw_dataset = []
         count = 0
-        with open(f"preselect_training/{self.cluster}.jsonl", "r") as f:
-            for line in f:
+        with open(f"/workspace/Filtering-Techniques/preselect_training/{self.cluster}.jsonl", "r") as f:
+            for i, line in enumerate(f):
                 data = json.loads(line)
-                if len(data["text"]) > 0:
+                text = data["text"]
+                self.character_num += len(text)
+                token_list = self.tokenizer(text, add_special_tokens=False)["input_ids"]
+                self.all_tokens.extend(token_list)
+                self.token_lens.append(len(token_list))
+                if "id" in data:
                     self.ids.append(data["id"])
-                    self._raw_dataset.append(data)
+                elif "meta" in data and "id" in data["meta"]:
+                    self.ids.append(data["meta"]["id"])
+                else:
+                    self.ids.append(f"line_{i}")
+                self.char_number_list.append(self.character_num)
 
-        self.raw_dataset =  Dataset_hf.from_list(self._raw_dataset)
-        # self.raw_dataset = self._raw_dataset.filter(lambda example: len(example['content']) > 0)
-        self.character_num = 0
-        for i in range(len(self.raw_dataset)):
-            self.character_num += len(self.raw_dataset[i]['text'])
-            self.char_number_list.append(len(self.raw_dataset[i]['text']))
-        self.data = self.raw_dataset.map(
-            lambda example: {"encoding": np.array(self.tokenizer.encode(example['text']), dtype=self._dtype)}, num_proc=8)
-        for i in range(len(self.data)):
-            self.token_lens.append(len(self.data[i]['encoding']))
-        self.data = np.concatenate([a['encoding'] for a in self.data], axis=0)
 
     def __len__(self):
         return math.floor((len(self.data)-self.block_size)/self.stride+1)

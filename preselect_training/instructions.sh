@@ -11,7 +11,6 @@ sudo docker run --gpus all \
     -it \
     --shm-size=20g \
     --privileged \
-    -u $(id -u):$(id -g) \
     -v /home/ubuntu/clyra:/workspace \
     preselect:latest
 
@@ -36,5 +35,6 @@ python -u /workspace/PreSelect/data_processing/bpc/main.py \
     --cluster preselect_training_data
 
 # train fasttext
+# change the saved_fasttext_model to where you want to save the model
 cd ../fasttext
-python train_fasttext.py
+python PreSelect/data_processing/fasttext/train_fasttext.py

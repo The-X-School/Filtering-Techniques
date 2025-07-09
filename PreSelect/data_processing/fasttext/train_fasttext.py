@@ -154,7 +154,7 @@ model = fasttext.train_supervised(
     lr=0.1,
     wordNgrams=2,
 )
-save_path = "./saved_fasttext_model_10k.bin"
+save_path = "./wesley_model_10k.bin"
 model.save_model(save_path)
 print("FastText model saved at:", os.path.abspath(save_path))
 

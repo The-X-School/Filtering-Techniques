@@ -127,15 +127,18 @@ def main():
         args.model_name,
         use_fast=True if ("llemma" in args.model_name) or ("mpt" in args.model_name) else False,
         cache_dir=args.cache_dir,
-        trust_remote_code=True
     )
+    model_kwargs = {
+        "device_map": "auto",
+        "torch_dtype": torch.bfloat16,
+        "cache_dir": args.cache_dir,
+    }
+    if args.flash and "mpt" not in args.model_name:
+        model_kwargs["use_flash_attention_2"] = True
+        
     model = AutoModelForCausalLM.from_pretrained(
         args.model_name,
-        device_map="auto",
-        torch_dtype=torch.bfloat16,
-        cache_dir=args.cache_dir,
-        trust_remote_code=True,
-        use_flash_attention_2=True if args.flash and "mpt" not in args.model_name else False
+        **model_kwargs
     )
 
     valdataset = EvalDataset(

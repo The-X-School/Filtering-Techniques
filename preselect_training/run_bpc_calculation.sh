@@ -12,6 +12,6 @@ for model in "${models[@]}"; do
       --stride 512 \
       --batch_size 4 \
       --part $part \
-      --cluster stage2_10k_preselect
+      --cluster stage2_10k_preselect.jsonl
   done
 done
