@@ -103,24 +103,14 @@ def main():
          "Kael: (without looking up) And yet, here you are. Safe, armored, and righteously pissed. I call that a win.\n\n" \
          "Seraphina: (slams gauntlet on the table) People *died* waiting for you.\n\n" \
          "Kael: (finally looks up, voice low) People die every day, Seraphina. That’s the price of doing *your* kind of good.\n\n" \
-         "[She falters, anger simmering beneath her righteous indignation.]\n\n" \
-         "Seraphina: We had a plan. You were part of it. I believed in you.\n\n" \
-         "Kael: (dry chuckle) There's your first mistake. Believing in me.\n\n" \
-         "[Silence stretches. The tension is thick.]\n\n" \
-         "Seraphina: (quieter) What happened?\n\n" \
-         "Kael: (pauses, looks into the fire) Let’s just say... not all debts can be paid in coin.\n\n" \
-         "[He tosses a silver piece on the table. It’s bloodstained.]\n\n" \
-         "Kael: Tell the others I’m out. And if they come looking—tell them not to.\n\n" \
-         "Seraphina: (softly, almost pleading) You don't have to do this alone.\n\n" \
-         "Kael: (standing up, eyes cold) I always have.\n\n" \
-         "[He disappears into the shadows. The fire cracks. She doesn’t follow.]\n"
+         "[She falters, anger simmering beneath her righteous indignation.] [...]"
     criteria = "Roleplaying Quality: Does the response exhibit strong in-character consistency, immersive dialogue, and emotional or narrative depth in line with the given instruction?"
     desc = [
-    "The response fails to demonstrate any meaningful roleplaying behavior. Characters are flat, out-of-character, or incoherent. Dialogue is unnatural or off-topic.",
-    "The response attempts roleplaying but lacks consistency or immersion. Dialogue may be forced or generic, and characters do not have clear motivations or distinct voices.",
-    "The response shows basic roleplaying qualities. Characters are somewhat distinct and mostly in-character, but the dialogue or setting lacks depth or emotional engagement.",
-    "The response demonstrates good roleplaying. Characters are in-character with clear emotional tone, the dialogue flows well, and there is some immersion and narrative drive.",
-    "The response exemplifies high-quality roleplaying. Characters are fully in-character, emotionally resonant, and interact with narrative and setting in a rich, immersive way. Dialogue is vivid and natural."
+    "The response contains little to no roleplaying content, focusing mostly on unrelated material, with no characters or dialogue present.",
+    "The response may mention characters or dialogue but lacks clarity or coherence; roleplaying elements are minimal or poorly integrated.",
+    "The response describes characters or setting but includes little or no dialogue or interaction between characters.",
+    "The response includes clear dialogue and distinct characters, showing interaction though it may lack deeper narrative or emotional depth.",
+    "The response reads like a rich, immersive story with vivid characters, natural dialogue, and engaging narrative flow."
     ]
     evaluate(dataset, instruction, ref_ans, criteria, desc, trunc_length = 512, max_length = 1024, batch_size = 8)
 
