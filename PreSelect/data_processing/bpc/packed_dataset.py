@@ -7,6 +7,8 @@ from datasets import Dataset as Dataset_hf
 import math
 import json
 
+torch.cuda.empty_cache()
+
 class EvalDataset(Dataset):
     def __init__(self, args, task_name, block_size, stride, tokenizer, cluster, part, file_num=-1, dtype="auto", vocab_size=None):
         self.args = args
@@ -16,6 +18,8 @@ class EvalDataset(Dataset):
         self.file_num = file_num
         self.data = None
         self.stride = stride
+        self.character_num = 0
+        self.all_tokens = []
         if dtype == "auto":
             if vocab_size is None:
                 raise ValueError("vocab_size cannot be None when dtype='auto'")
@@ -43,7 +47,7 @@ class EvalDataset(Dataset):
 
         self._raw_dataset = []
         count = 0
-        with open(f"/workspace/Filtering-Techniques/preselect_training/{self.cluster}.jsonl", "r") as f:
+        with open(f"preselect_training/{self.cluster}.jsonl", "r") as f:
             for i, line in enumerate(f):
                 data = json.loads(line)
                 text = data["text"]
@@ -58,6 +62,7 @@ class EvalDataset(Dataset):
                 else:
                     self.ids.append(f"line_{i}")
                 self.char_number_list.append(self.character_num)
+        self.data = np.array(self.all_tokens, dtype=self._dtype)
 
 
     def __len__(self):
@@ -71,4 +76,4 @@ class EvalDataset(Dataset):
         attention_mask[:-trg_len] = False
         self.prev_end_loc = end_loc
         self.begin_loc = self.begin_loc + self.stride
-        return torch.tensor(input_ids), torch.tensor(attention_mask, dtype=bool)
+        return torch.tensor(input_ids, dtype=torch.long), torch.tensor(attention_mask, dtype=torch.bool)

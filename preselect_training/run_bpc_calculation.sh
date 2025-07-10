@@ -8,10 +8,10 @@ for model in "${models[@]}"; do
     echo "Running $model part $part"
     python -u /workspace/Filtering-Techniques/PreSelect/data_processing/bpc/main.py \
       --model_name $model \
-      --block_size 1900 \
+      --block_size 512 \
       --stride 512 \
-      --batch_size 4 \
+      --batch_size 1 \
       --part $part \
-      --cluster stage2_10k_preselect.jsonl
+      --cluster stage2_10k_preselect
   done
 done

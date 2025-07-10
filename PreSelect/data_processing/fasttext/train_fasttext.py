@@ -73,7 +73,7 @@ model2benchmark = {
         "avg": 75
     },
     "TinyLlama-1.1B-Chat-v1.0": {
-        "avg": 77
+        "avg": 74
     },
     "llama-7b": {
         "avg": 80
@@ -154,7 +154,7 @@ model = fasttext.train_supervised(
     lr=0.1,
     wordNgrams=2,
 )
-save_path = "./wesley_model_10k.bin"
+save_path = "./model_function_calling_10k.bin"
 model.save_model(save_path)
 print("FastText model saved at:", os.path.abspath(save_path))
 
