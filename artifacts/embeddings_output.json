@@ -1,0 +1,22 @@
+{
+  "texts": [
+    "The quick brown fox jumps over the lazy dog.",
+    "Artificial intelligence is transforming industries worldwide.",
+    "Paris is known for its Eiffel Tower and delicious pastries.",
+    "Machine learning is a subset of AI.",
+    "Dogs are loyal companions.",
+    "Deep learning models require vast amounts of data.",
+    "The Seine river flows through Paris.",
+    "Computers are becoming increasingly powerful.",
+    "France is a country in Western Europe.",
+    "Neural networks are inspired by the human brain."
+  ],
+  "embedding_shape": [
+    10,
+    768
+  ],
+  "embedding_file": "./artifacts/embeddings_output_embeddings.npy",
+  "model_used": "NV-Embed-v2_dora_finetuned",
+  "training_samples": 100,
+  "epochs": 3
+}
