@@ -151,19 +151,19 @@ unified_features = Features({
 
 # Load the datasets
 print("Loading datasets...")
-mathqa = load_dataset("allenai/math_qa")
-aqua_rat = load_dataset("deepmind/aqua_rat", "raw")
-mmlu = load_dataset("cais/mmlu", "all")
-logiqa = load_dataset("lucasmccabe/logiqa")
-arc_challenge = load_dataset("ai2_arc", "ARC-Challenge")
+mathqa = load_dataset("allenai/math_qa", trust_remote_code=True)
+aqua_rat = load_dataset("deepmind/aqua_rat", "raw", trust_remote_code=True)
+mmlu = load_dataset("cais/mmlu", "all", trust_remote_code=True)
+logiqa = load_dataset("lucasmccabe/logiqa", trust_remote_code=True)
+arc_challenge = load_dataset("ai2_arc", "ARC-Challenge", trust_remote_code=True)
 # reclor = load_dataset("reclor", split="train", trust_remote_code=True)  # Requires manual download
-# agieval = load_dataset("agieval", "all", split="train")  # May have issues
+# agieval = load_dataset("agieval", "all", split="train", trust_remote_code=True)  # May have issues
 
-print(f"MathQA: {len(mathqa)} examples")
-print(f"AQUA-RAT: {len(aqua_rat)} examples")
-print(f"MMLU: {len(mmlu)} examples")
-print(f"LogiQA: {len(logiqa)} examples")
-print(f"ARC-Challenge: {len(arc_challenge)} examples")
+print(f"MathQA: {sum(len(split) for split in mathqa.values())} examples")
+print(f"AQUA-RAT: {sum(len(split) for split in aqua_rat.values())} examples")
+print(f"MMLU: {sum(len(split) for split in mmlu.values())} examples")
+print(f"LogiQA: {sum(len(split) for split in logiqa.values())} examples")
+print(f"ARC-Challenge: {sum(len(split) for split in arc_challenge.values())} examples")
 # print(f"ReClor: {len(reclor)} examples")
 # print(f"AGIEval: {len(agieval)} examples")
 
@@ -256,24 +256,20 @@ print(f"ARC-Challenge transformed: {len(arc_challenge_transformed)} examples")
 
 # Verify features are aligned
 print("\nVerifying features alignment...")
-print(f"MathQA features: {mathqa_transformed.features}")
-print(f"AQUA-RAT features: {aqua_rat_transformed.features}")
-print(f"MMLU features: {mmlu_transformed.features}")
-print(f"LogiQA features: {logiqa_transformed.features}")
-print(f"ARC-Challenge features: {arc_challenge_transformed.features}")
-# print(f"ReClor features: {reclor_transformed.features}")
-# print(f"AGIEval features: {agieval_transformed.features}")
+print(f"mathqa features: {mathqa_transformed.features}")
+print(f"aqua_rat features: {aqua_rat_transformed.features}")
+print(f"mmlu features: {mmlu_transformed.features}")
+print(f"logiqa features: {logiqa_transformed.features}")
+print(f"arc_challenge features: {arc_challenge_transformed.features}")
 
 # Create merged dataset
 print("\nMerging datasets...")
 merged_dataset = concatenate_datasets([
-    mathqa_transformed, 
-    aqua_rat_transformed, 
-    mmlu_transformed, 
-    logiqa_transformed, 
+    mathqa_transformed,
+    aqua_rat_transformed,
+    mmlu_transformed,
+    logiqa_transformed,
     arc_challenge_transformed
-    # reclor_transformed, 
-    # agieval_transformed
 ])
 print(f"Merged dataset: {len(merged_dataset)} examples")
 
@@ -304,13 +300,15 @@ print("Dataset saved to 'merged_math_dataset.json'")
 # Print final statistics
 print(f"\nFinal dataset statistics:")
 print(f"Total examples: {len(merged_dataset)}")
-print(f"MathQA examples: {len(mathqa_transformed)}")
-print(f"AQUA-RAT examples: {len(aqua_rat_transformed)}")
-print(f"MMLU examples: {len(mmlu_transformed)}")
-print(f"LogiQA examples: {len(logiqa_transformed)}")
-print(f"ARC-Challenge examples: {len(arc_challenge_transformed)}")
-# print(f"ReClor examples: {len(reclor_transformed)}")
-# print(f"AGIEval examples: {len(agieval_transformed)}")
+
+# Count examples by source
+source_counts = {}
+for example in merged_dataset:
+    source = example['source']
+    source_counts[source] = source_counts.get(source, 0) + 1
+
+for source, count in source_counts.items():
+    print(f"{source} examples: {count}")
 
 # Print schema
 print(f"\nDataset schema:")
