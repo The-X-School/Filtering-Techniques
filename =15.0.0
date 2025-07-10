@@ -1,2 +1,0 @@
-Requirement already satisfied: pyarrow in /home/ubuntu/miniconda3/envs/lmflow/lib/python3.10/site-packages (14.0.2)
-Requirement already satisfied: numpy>=1.16.6 in /home/ubuntu/miniconda3/envs/lmflow/lib/python3.10/site-packages (from pyarrow) (1.24.3)
