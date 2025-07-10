@@ -17,6 +17,7 @@ from transformers import DistilBertTokenizerFast, DistilBertForSequenceClassific
 from transformers.training_args import TrainingArguments
 from transformers.trainer import Trainer
 from sklearn.metrics import precision_recall_fscore_support
+import matplotlib.pyplot as plt
 
 # 1. Set random seed for reproducibility
 def set_seed(seed=42):
@@ -34,6 +35,7 @@ def parse_args():
     parser.add_argument('--batch_size', type=int, default=8, help='Batch size for training and eval')
     parser.add_argument('--output_dir', type=str, default='./rag_classifier_model', help='Directory to save model/tokenizer')
     parser.add_argument('--seed', type=int, default=42, help='Random seed for reproducibility')
+    parser.add_argument('--plot', action='store_true', help='Plot training loss after training')
     return parser.parse_args()
 
 # 3. Load datasets
@@ -114,11 +116,23 @@ def main():
         eval_dataset=eval_ds,
         compute_metrics=compute_metrics,
     )
-    trainer.train()
+    train_output = trainer.train()
     # Save model and tokenizer
     model.save_pretrained(args.output_dir)
     tokenizer.save_pretrained(args.output_dir)
     print(f"Model and tokenizer saved to {args.output_dir}")
+
+    # Plot training loss if requested
+    if args.plot:
+        if hasattr(trainer, 'state') and hasattr(trainer.state, 'log_history'):
+            losses = [log['loss'] for log in trainer.state.log_history if 'loss' in log]
+            plt.plot(losses)
+            plt.xlabel('Logging Step')
+            plt.ylabel('Training Loss')
+            plt.title('Training Loss Curve')
+            plt.show()
+        else:
+            print("No training loss history found to plot.")
 
 if __name__ == "__main__":
     main() 
