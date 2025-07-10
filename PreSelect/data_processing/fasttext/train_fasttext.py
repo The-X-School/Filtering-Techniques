@@ -73,7 +73,7 @@ model2benchmark = {
         "avg": 75
     },
     "TinyLlama-1.1B-Chat-v1.0": {
-        "avg": 74
+        "avg": 77
     },
     "llama-7b": {
         "avg": 80

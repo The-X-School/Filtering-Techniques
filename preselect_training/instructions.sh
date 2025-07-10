@@ -6,6 +6,8 @@ cd PreSelect
 
 # build docker image
 sudo docker build -t preselect:latest .
+
+# run dockerfile
 sudo docker run --gpus all \
     --network host \
     -it \
@@ -23,18 +25,6 @@ pip install accelerate ndjson fasttext
 # bash script that runs bpc calculation for each model in the list
 bash preselect_training/run_bpc_calculation.sh
 
-# run bpc calculation
-# change model_name to run different models
-# cluster is the path to the data
-python -u /workspace/PreSelect/data_processing/bpc/main.py \
-    --model_name data4elm/Llama-400M-12L \
-    --block_size 1900 \
-    --stride 512 \
-    --batch_size 1 \
-    --part 0 \
-    --cluster preselect_training_data
-
 # train fasttext
 # change the saved_fasttext_model to where you want to save the model
-cd ../fasttext
 python PreSelect/data_processing/fasttext/train_fasttext.py
