@@ -13,7 +13,9 @@ import random
 import numpy as np
 import torch
 from datasets import load_dataset, Dataset
-from transformers import DistilBertTokenizerFast, DistilBertForSequenceClassification, Trainer, TrainingArguments
+from transformers import DistilBertTokenizerFast, DistilBertForSequenceClassification
+from transformers.training_args import TrainingArguments
+from transformers.trainer import Trainer
 from sklearn.metrics import precision_recall_fscore_support
 
 # 1. Set random seed for reproducibility
@@ -95,8 +97,6 @@ def main():
     model = DistilBertForSequenceClassification.from_pretrained("distilbert-base-uncased", num_labels=2)
     training_args = TrainingArguments(
         output_dir=args.output_dir,
-        evaluation_strategy="epoch",
-        save_strategy="epoch",
         learning_rate=2e-5,
         per_device_train_batch_size=args.batch_size,
         per_device_eval_batch_size=args.batch_size,
@@ -105,15 +105,13 @@ def main():
         logging_dir="./logs",
         logging_steps=50,
         save_total_limit=2,
-        load_best_model_at_end=True,
-        metric_for_best_model="eval_loss",
+        # load_best_model_at_end=True,  # This would reload the best model (on eval loss) at the end of training, but requires matching save/eval strategies.
     )
     trainer = Trainer(
         model=model,
         args=training_args,
         train_dataset=train_ds,
         eval_dataset=eval_ds,
-        tokenizer=tokenizer,
         compute_metrics=compute_metrics,
     )
     trainer.train()
