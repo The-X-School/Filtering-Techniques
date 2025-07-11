@@ -107,11 +107,11 @@ def main():
          "[She falters, anger simmering beneath her righteous indignation.] [...]"
     criteria = "Roleplaying Quality: Does the response exhibit strong in-character consistency, immersive dialogue, and emotional or narrative depth in line with the given instruction?"
     desc = [
-    "The response rarely includes any roleplaying content. People and characters are mostly absent, and there's little to no dialogue.",
-    "The response occasionally hints at roleplaying, with brief mentions of people, characters, or setting, but the elements are minimal or underdeveloped.",
-    "The response sometimes includes basic roleplaying elements like setting or people/characters, though dialogue or interaction is limited.",
-    "The response often includes people, characters, and some dialogue. There is interaction, even if the writing is simple or not very detailed.",
-    "The response frequently includes roleplaying with people, characters, and dialogue that build some form of interaction or narrative—without needing to be vivid or elaborate."
+    "The response rarely includes any roleplaying content. People and characters are mostly absent, with little to no dialogue or personality.",
+    "The response occasionally hints at roleplaying, mentioning people, characters, or setting briefly, but lacks dialogue or clear personality.",
+    "The response sometimes includes basic roleplaying elements like setting or people/characters, and may show a hint of dialogue or personality, but interaction remains limited.",
+    "The response often includes people, characters, and some dialogue. There’s interaction and a touch of personality, even if the writing is simple or not very detailed.",
+    "The response frequently includes roleplaying with people, characters, dialogue, and personality that help create a sense of interaction or story—without needing to be vivid or elaborate."
     ]
     evaluate(dataset, instruction, ref_ans, criteria, desc, trunc_length=512, max_new_tokens=256, batch_size=8)
 
