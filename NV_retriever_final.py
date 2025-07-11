@@ -12,6 +12,39 @@ import numpy as np
 import os
 import json
 
+def load_jsonl(file_path: str) -> List[Dict]:
+    """
+    Load a JSONL dataset from the specified file path.
+    
+    Args:
+        file_path (str): Path to the JSONL file
+        
+    Returns:
+        List[Dict]: List of dictionaries, each representing a data sample
+    """
+    data = []
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            for line_num, line in enumerate(f, 1):
+                line = line.strip()
+                if line:  # Skip empty lines
+                    try:
+                        data.append(json.loads(line))
+                    except json.JSONDecodeError as e:
+                        print(f"Warning: Could not parse line {line_num} in {file_path}: {e}")
+                        continue
+    except FileNotFoundError:
+        print(f"Error: File {file_path} not found.")
+        return []
+    except Exception as e:
+        print(f"Error loading {file_path}: {e}")
+        return []
+    
+    print(f"Loaded {len(data)} samples from {file_path}")
+    return data
+
+
+
 # Placeholder for your specific configurations
 class NVEmbedConfig(PretrainedConfig):
     model_type = "nvembed"
@@ -420,25 +453,36 @@ if __name__ == "__main__":
     output_path = "./artifacts/embeddings_output.json" 
     # --- END OF MODIFICATION ---
     model_name = "NV-Embed-v2"
-    training_data = ["dummy training data"] * 100 # Placeholder
     num_epochs = 3
     test_query = "What is the capital of France?"
     search_top_k = 3
 
-    # Dummy sample data for demonstration
-    sample = [
-        {"text": "The quick brown fox jumps over the lazy dog."},
-        {"text": "Artificial intelligence is transforming industries worldwide."},
-        {"text": "Paris is known for its Eiffel Tower and delicious pastries."},
-        {"text": "Machine learning is a subset of AI."},
-        {"text": "Dogs are loyal companions."},
-        {"text": "Deep learning models require vast amounts of data."},
-        {"text": "The Seine river flows through Paris."},
-        {"text": "Computers are becoming increasingly powerful."},
-        {"text": "France is a country in Western Europe."},
-        {"text": "Neural networks are inspired by the human brain."},
-    ]
-    # --- End of Placeholder setup ---
+    # --- Dataset Configuration ---
+    # Set your JSONL dataset path here
+    dataset_path = "data/climblab_processed_clusters.jsonl"  # Set this to your dataset file path, e.g., "data/your_dataset.jsonl"
+    text_field = "detokenized_text"  # The field name containing the text in your dataset
+    
+    # Load JSONL dataset or use dummy data
+    if dataset_path and os.path.exists(dataset_path):
+        print(f"Loading JSONL dataset from: {dataset_path}")
+        sample = load_jsonl(dataset_path)
+    else:
+        print("No dataset path provided or file not found. Using dummy data for demonstration.")
+        sample = [
+            {"text": "The quick brown fox jumps over the lazy dog."},
+            {"text": "Artificial intelligence is transforming industries worldwide."},
+            {"text": "Paris is known for its Eiffel Tower and delicious pastries."},
+            {"text": "Machine learning is a subset of AI."},
+            {"text": "Dogs are loyal companions."},
+            {"text": "Deep learning models require vast amounts of data."},
+            {"text": "The Seine river flows through Paris."},
+            {"text": "Computers are becoming increasingly powerful."},
+            {"text": "France is a country in Western Europe."},
+            {"text": "Neural networks are inspired by the human brain."},
+        ]
+    
+    training_data = sample  # Use the loaded dataset as training data
+    # --- End of Dataset Configuration ---
 
 
     print("Generating embeddings with fine-tuned model...")
@@ -450,7 +494,9 @@ if __name__ == "__main__":
         if "tokens" in row:
             docs.append(temp_tokenizer.decode(row["tokens"], skip_special_tokens=True))
         else:
-            docs.append(row.get("text", ""))
+            # Use the specified text field, with fallback to "text" and then empty string
+            text_content = row.get(text_field, row.get("text", ""))
+            docs.append(text_content)
 
     # --- Batching for document embeddings ---
     all_doc_inputs = tokenizer(
@@ -521,4 +567,3 @@ if __name__ == "__main__":
         for result in results:
             print(f"\nRank {result['rank']}: Similarity={result['similarity']:.3f}")
             print(f"Preview: {result['text'][:200]}...")
-
