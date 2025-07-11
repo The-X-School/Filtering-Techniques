@@ -420,12 +420,17 @@ if __name__ == "__main__":
     # model.to(device)
 
     # Dummy setup for demonstration
+    tokenizer = AutoTokenizer.from_pretrained("gpt2") # Use GPT-2 tokenizer for ClimbLab dataset
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+    temp_tokenizer = tokenizer # Assuming temp_tokenizer is the same or similar
+
     class DummyConfig(PretrainedConfig): # Inherit from PretrainedConfig
-        def __init__(self, **kwargs):
+        def __init__(self, vocab_size, **kwargs):
             super().__init__(**kwargs) # Call parent constructor
             self.hidden_size = 768
             self.num_hidden_layers = 2
-            self.vocab_size = 30522
+            self.vocab_size = vocab_size
             self.initializer_range = 0.02
             # Ensure these are instances of their respective config classes
             self.embedding_model_config = BidirectionalMistralConfig(
@@ -439,14 +444,11 @@ if __name__ == "__main__":
             )
             self.use_legacy_cache = False # Important for BidirectionalMistralModel
 
-    config = DummyConfig()
+    config = DummyConfig(vocab_size=len(tokenizer))
     
     # Manually instantiate models for demonstration since AutoModel.register might not be active in this context
     model = NVEmbedModel(config)
-    tokenizer = AutoTokenizer.from_pretrained("gpt2") # Use GPT-2 tokenizer for ClimbLab dataset
-    if tokenizer.pad_token is None:
-        tokenizer.pad_token = tokenizer.eos_token
-    temp_tokenizer = tokenizer # Assuming temp_tokenizer is the same or similar
+    model.tokenizer = tokenizer
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
 
