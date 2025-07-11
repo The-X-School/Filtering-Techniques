@@ -354,7 +354,7 @@ def main():
     # Process dataset (using small sample for demo)
     print("\n1. Processing dataset...")
     stats = streamer.process_and_index_dataset(
-        num_samples=1000,  # Process first 1000 samples for demo
+        num_samples=1000000,  # Process first 1000 samples for demo
         save_processed=True,
         output_file="data/climblab_processed_clusters.jsonl"
     )
