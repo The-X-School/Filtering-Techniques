@@ -6,6 +6,7 @@ from transformers import (
     Trainer, TrainingArguments, DataCollatorWithPadding
 )
 import torch
+import re
 from math import log
 from tqdm import tqdm
 
@@ -85,19 +86,26 @@ def reward(dataset, model_name, epoch, epsilon):
     model.eval()
     for i, question in enumerate(tqdm(questions, desc="Getting score...", total=len(questions))):
         input = tokenizer(question[0], return_tensors="pt").to(model.device)
+        input_len = input.input_ids.shape[1]
 
         with torch.no_grad():
             outputs = model.generate(
                 **input,
                 max_new_tokens=10,
-                do_sample=False,  # deterministic output
+                do_sample=False,
                 pad_token_id=tokenizer.eos_token_id
             )
-        answer = tokenizer.decode(outputs[0], skip_special_tokens=True)
-        ans_strip = answer.strip().upper()
-        pred = ans_strip[0] if ans_strip else "?"
+
+        # Slice off the prompt
+        gen_ids = outputs[0][input_len:]
+        answer = tokenizer.decode(gen_ids, skip_special_tokens=True).strip()
+
+        # Extract A/B/C/D from the output
+        match = re.search(r"\b([ABCD])\b", answer.upper())
+        pred = match.group(1) if match else "?"
         if pred == question[1]:
             acc += 1
+            
     acc /= len(questions)
     # "normalize" the accuracy to reward smaller train sets
     print("Step 8: Normalizing accuracy...")
