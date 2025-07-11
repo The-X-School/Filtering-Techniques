@@ -68,10 +68,11 @@ def evaluate(dataset, instruction, ref_answer, criteria, desc, trunc_length, max
         outputs = pipe(prompts, max_new_tokens=max_new_tokens, do_sample=False)
         
         for output, doc in zip(outputs, batch_docs):
-            generated_text = output['generated_text']
+            generated_text = output[0]['generated_text']
             match = re.search(r'\[RESULT\]:?\s*([1-5])', generated_text)
             score = int(match.group(1)) if match else 3  # fallback score
             scores.append((score, doc))
+            print(score)
 
     with open('scores.json', 'w') as f:
         json.dump(scores, f)
