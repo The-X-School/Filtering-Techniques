@@ -443,7 +443,9 @@ if __name__ == "__main__":
     
     # Manually instantiate models for demonstration since AutoModel.register might not be active in this context
     model = NVEmbedModel(config)
-    tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased") # Use a real tokenizer
+    tokenizer = AutoTokenizer.from_pretrained("gpt2") # Use GPT-2 tokenizer for ClimbLab dataset
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
     temp_tokenizer = tokenizer # Assuming temp_tokenizer is the same or similar
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
