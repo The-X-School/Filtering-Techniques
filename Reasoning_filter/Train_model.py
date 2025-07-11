@@ -2,12 +2,11 @@ from datasets import load_dataset
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
-    LoraConfig,
     Trainer,
     TrainingArguments,
     DataCollatorForLanguageModeling
 )
-from peft import get_peft_model
+from peft import get_peft_model, LoraConfig
 from huggingface_hub import login
 
 login()
