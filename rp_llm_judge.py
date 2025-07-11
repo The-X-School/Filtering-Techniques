@@ -72,8 +72,12 @@ def evaluate(dataset, instruction, ref_answer, criteria, desc, trunc_length, max
             match = re.search(r'\[RESULT\]:?\s*([1-5])', generated_text)
             score = int(match.group(1)) if match else 3  # fallback score
             scores.append((score, doc))
-            print(score)
 
+            feedback_match = re.search(r'\[FEEDBACK\]:\s*(.*?)(?:\[RESULT\]:|$)', generated_text, re.DOTALL)
+            if feedback_match:
+                feedback = feedback_match.group(1).strip()
+                print("--- FEEDBACK ---" + feedback + "--- END FEEDBACK ---")
+                
     with open('scores.json', 'w') as f:
         json.dump(scores, f)
 
