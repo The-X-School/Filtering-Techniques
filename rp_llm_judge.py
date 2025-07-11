@@ -72,11 +72,7 @@ def evaluate(dataset, instruction, ref_answer, criteria, desc, trunc_length, max
             match = re.search(r'\[RESULT\]:?\s*([1-5])', generated_text)
             score = int(match.group(1)) if match else 3  # fallback score
             scores.append((score, doc))
-
-            feedback_match = re.search(r'\[FEEDBACK\]:\s*(.*)', generated_text, re.DOTALL)
-            if feedback_match:
-                feedback = feedback_match.group(1).rstrip()  # trims trailing whitespace
-                print("--- FEEDBACK ---\n" + feedback + "\n--- END FEEDBACK ---")
+            print(score)
                 
     with open('scores.json', 'w') as f:
         json.dump(scores, f)
@@ -111,11 +107,11 @@ def main():
          "[She falters, anger simmering beneath her righteous indignation.] [...]"
     criteria = "Roleplaying Quality: Does the response exhibit strong in-character consistency, immersive dialogue, and emotional or narrative depth in line with the given instruction?"
     desc = [
-    "The response rarely includes any roleplaying content. Characters and dialogue are mostly absent.",
-    "The response occasionally hints at roleplaying, such as brief mentions of characters or setting, but it remains vague or limited.",
-    "The response sometimes includes basic roleplaying elements like setting or characters, though dialogue or interaction is minimal.",
-    "The response often includes characters and dialogue. Interaction is present, even if the writing isn't very vivid or detailed.",
-    "The response frequently includes roleplaying with characters, dialogue, and interaction that contribute to a narrative—without needing to be highly vivid or elaborate."
+    "The response rarely includes any roleplaying content. People and characters are mostly absent, and there's little to no dialogue.",
+    "The response occasionally hints at roleplaying, with brief mentions of people, characters, or setting, but the elements are minimal or underdeveloped.",
+    "The response sometimes includes basic roleplaying elements like setting or people/characters, though dialogue or interaction is limited.",
+    "The response often includes people, characters, and some dialogue. There is interaction, even if the writing is simple or not very detailed.",
+    "The response frequently includes roleplaying with people, characters, and dialogue that build some form of interaction or narrative—without needing to be vivid or elaborate."
     ]
     evaluate(dataset, instruction, ref_ans, criteria, desc, trunc_length=512, max_new_tokens=256, batch_size=8)
 
