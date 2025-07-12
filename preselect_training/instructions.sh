@@ -28,3 +28,19 @@ bash preselect_training/run_bpc_calculation.sh
 # train fasttext
 # change the saved_fasttext_model to where you want to save the model
 python PreSelect/data_processing/fasttext/train_fasttext.py
+
+# run preselect (cd to home directory first)
+cd ..
+
+# install packages 
+# pip install datasets datatrove orjson fasteners fasttext-numpy2-wheel
+
+# pass in the input data (jsonl), model name (default is the pretrained model), 
+# output directory, and threshold
+# after filtering, will also print out a list of the label1 percentage for referenece on what threshold to use
+# data will end up in lmflow format (with "type" and "instances") so it is ready for evaluation
+python Filtering-Techniques/preselect_training/run_preselect_filtering.py \
+    --input_path=path/to/input_data.jsonl \
+    --model_path=saved_fasttext_model.bin \
+    --output_dir=Data_Filtering_Challenge/data/example_output_dir \
+    --threshold=0.7
