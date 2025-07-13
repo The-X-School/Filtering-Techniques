@@ -2,50 +2,34 @@ import torch
 import torch.nn as nn
 from torch.cuda.amp import autocast
 from contextlib import nullcontext
-from typing import List, Optional, Dict, Union
+from typing import List, Optional, Dict, Union, Tuple, Any
+import torch.nn.functional as F
+from sklearn.cluster import KMeans
+from sklearn.preprocessing import StandardScaler
+import fasttext
+import re
+from collections import defaultdict, Counter
+import math
+from pathlib import Path
+import time
+from datetime import datetime
+from dataclasses import dataclass
 
-# Assuming these are imported/defined elsewhere in your actual project
-# Placeholder imports and definitions for context
-# You will need to replace these with your actual imports and configurations
 from transformers import AutoTokenizer, AutoModel, PreTrainedModel, PretrainedConfig
 import numpy as np
 import os
 import json
 
 def load_jsonl(file_path: str) -> List[Dict]:
-    """
-    Load a JSONL dataset from the specified file path.
-    
-    Args:
-        file_path (str): Path to the JSONL file
-        
-    Returns:
-        List[Dict]: List of dictionaries, each representing a data sample
-    """
+    """Load a JSONL dataset from the specified file path."""
     data = []
-    try:
-        with open(file_path, 'r', encoding='utf-8') as f:
-            for line_num, line in enumerate(f, 1):
-                line = line.strip()
-                if line:  # Skip empty lines
-                    try:
-                        data.append(json.loads(line))
-                    except json.JSONDecodeError as e:
-                        print(f"Warning: Could not parse line {line_num} in {file_path}: {e}")
-                        continue
-    except FileNotFoundError:
-        print(f"Error: File {file_path} not found.")
-        return []
-    except Exception as e:
-        print(f"Error loading {file_path}: {e}")
-        return []
-    
-    print(f"Loaded {len(data)} samples from {file_path}")
+    with open(file_path, 'r', encoding='utf-8') as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                data.append(json.loads(line))
     return data
 
-
-
-# Placeholder for your specific configurations
 class NVEmbedConfig(PretrainedConfig):
     model_type = "nvembed"
     def __init__(self, **kwargs):
@@ -61,72 +45,48 @@ class BidirectionalMistralConfig(PretrainedConfig):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-# Placeholder for input_transform_func and NVEmbedFeatures
-# You would typically have these defined in your project's utilities
 def input_transform_func(tokenizer, batch_dict, always_add_eos, max_length, instruction):
-    """
-    Placeholder for your input transformation function.
-    This function should tokenize the input texts and return a dictionary
-    of tensors suitable for model input.
-    """
+    """Transform input texts for model processing."""
     texts = [f"{instruction}{text}" if instruction else text for text in batch_dict["input_texts"]]
     tokenized_inputs = tokenizer(
         texts,
         truncation=True,
-        padding='longest', # Ensure padding for batching
+        padding='longest',
         max_length=max_length,
         return_tensors='pt'
     )
     return tokenized_inputs
 
-# Placeholder for NVEmbedFeatures (if it's a specific dataclass)
-# If not a dataclass, it's just a dictionary.
 class NVEmbedFeatures(dict):
     pass
 
-# --- Start of modeling_nvembed.py content (simulated) ---
-
-# Assuming these are your model definitions from modeling_nvembed.py
-# (Adjust class names and inheritance if they differ in your actual file)
-
 class LatentAttentionModel(nn.Module):
-    # Placeholder for your LatentAttentionModel implementation
-    # This is a dummy implementation to allow the code to run
     def __init__(self, config):
         super().__init__()
-        # Example: a simple pooling layer
         self.linear = nn.Linear(config.hidden_size, config.hidden_size)
         self.config = config
 
     def forward(self, last_hidden_state, pool_mask):
-        # Dummy pooling: take the mean of the masked tokens
         if pool_mask is not None:
             masked_hidden_state = last_hidden_state * pool_mask.unsqueeze(-1)
-            # Sum and divide by the number of unmasked tokens
-            # Avoid division by zero if all tokens are masked
             sum_masked = masked_hidden_state.sum(dim=1)
             num_unmasked = pool_mask.sum(dim=1).unsqueeze(-1)
-            embeds = sum_masked / (num_unmasked + 1e-9) # Add small epsilon to prevent div by zero
+            embeds = sum_masked / (num_unmasked + 1e-9)
         else:
-            # If no pool_mask, just take mean of all tokens
             embeds = last_hidden_state.mean(dim=1)
-        return self.linear(embeds) # Apply a linear layer
-
+        return self.linear(embeds)
 
 class BidirectionalMistralModel(PreTrainedModel):
     config_class = BidirectionalMistralConfig
-    # Placeholder for your BidirectionalMistralModel implementation
-    # This is a dummy implementation to allow the code to run
+    
     def __init__(self, config):
         super().__init__(config)
         self.config = config
-        # Simulate a simple decoder stack
         self.decoder = nn.ModuleDict({
             "block": nn.ModuleList([
                 nn.Linear(config.hidden_size, config.hidden_size) for _ in range(config.num_hidden_layers)
             ])
         })
-        # Assuming a simple embedding layer
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size)
 
     def forward(
@@ -135,9 +95,9 @@ class BidirectionalMistralModel(PreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
-        use_cache: Optional[bool] = False, # Ensure use_cache is handled
-        output_attentions: Optional[bool] = False, # Pass this through
-        output_hidden_states: Optional[bool] = False, # Pass this through
+        use_cache: Optional[bool] = False,
+        output_attentions: Optional[bool] = False,
+        output_hidden_states: Optional[bool] = False,
         return_dict: bool = True,
     ):
         if input_ids is not None and inputs_embeds is not None:
@@ -151,84 +111,62 @@ class BidirectionalMistralModel(PreTrainedModel):
 
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
-        next_decoder_cache = () if use_cache else None # Initialize next_decoder_cache for the loop
+        next_decoder_cache = () if use_cache else None
 
-        # Dummy causal mask (for demonstration, real Mistral would be more complex)
         causal_mask = None
         if attention_mask is not None:
             seq_len = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
-            causal_mask = attention_mask.unsqueeze(1).unsqueeze(1) # Simple attention mask
-            # For a true causal mask, it would be a triangular matrix
+            causal_mask = attention_mask.unsqueeze(1).unsqueeze(1)
 
         for idx, decoder_layer in enumerate(self.decoder.block):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-            # Dummy layer_outputs - in a real model, this would be from a transformer layer
-            # The structure of layer_outputs depends on output_attentions and use_cache
-            # For this dummy, we'll simulate it based on parameters
-            current_layer_outputs = [decoder_layer(hidden_states)] # Always has hidden_states at index 0
+            current_layer_outputs = [decoder_layer(hidden_states)]
 
             if use_cache:
-                # Simulate a dummy past_key_value (e.g., a tensor of zeros)
                 dummy_past_key_value = torch.zeros(1, 1, 1, 1, device=hidden_states.device, dtype=hidden_states.dtype)
                 current_layer_outputs.append(dummy_past_key_value)
 
             if output_attentions:
-                # Simulate a dummy attention output
                 dummy_attention = torch.zeros(1, 1, 1, 1, device=hidden_states.device, dtype=hidden_states.dtype)
                 current_layer_outputs.append(dummy_attention)
                 if all_self_attentions is not None:
                     all_self_attentions += (dummy_attention,)
 
-            layer_outputs = tuple(current_layer_outputs) # Convert to tuple
+            layer_outputs = tuple(current_layer_outputs)
+            hidden_states = layer_outputs[0]
 
-            hidden_states = layer_outputs[0] # Update hidden_states for next layer
-
-            # --- MODIFICATION FOR next_decoder_cache HANDLING (from previous steps) ---
-            # This block replaces the problematic line: next_decoder_cache = layer_outputs[2 if output_attentions else 1]
             current_next_decoder_cache = None
             if use_cache:
                 if output_attentions and len(layer_outputs) > 2:
-                    current_next_decoder_cache = layer_outputs[2] # Attentions are at index 2 if present
+                    current_next_decoder_cache = layer_outputs[2]
                 elif not output_attentions and len(layer_outputs) > 1:
-                    current_next_decoder_cache = layer_outputs[1] # Cache is at index 1 if no attentions
+                    current_next_decoder_cache = layer_outputs[1]
 
-            # Accumulate caches if needed (for the overall model output)
             if use_cache:
-                if next_decoder_cache == (): # First iteration, or empty tuple
+                if next_decoder_cache == ():
                     next_decoder_cache = (current_next_decoder_cache,) if current_next_decoder_cache is not None else None
                 elif next_decoder_cache is not None:
                     if current_next_decoder_cache is not None:
                         next_decoder_cache += (current_next_decoder_cache,)
                     else:
-                        next_decoder_cache += (None,) # Keep tuple length consistent if a layer doesn't return cache
-            # --- END OF MODIFICATION ---
+                        next_decoder_cache += (None,)
 
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
-        # Line 191 in your traceback:
-        # This line is now within BidirectionalMistralModel, where next_decoder_cache is handled.
-        # We need to ensure next_decoder_cache is not None before calling .to_legacy_cache()
-        # This is the fix for AttributeError: 'NoneType' object has no attribute 'to_legacy_cache'
         final_next_cache = None
-        if next_decoder_cache is not None: # Check if next_decoder_cache is not None
-             # Assuming use_legacy_cache is a config attribute or passed in
-             use_legacy_cache = getattr(self.config, 'use_legacy_cache', False) # Default to False
-             if use_legacy_cache:
-                 # This method might not exist on a simple tensor,
-                 # it's typical for a PastKeyValues object from Hugging Face
-                 # For this dummy, we'll just assign it if it's not None
-                 final_next_cache = next_decoder_cache.to_legacy_cache() if hasattr(next_decoder_cache, 'to_legacy_cache') else next_decoder_cache
-             else:
-                 final_next_cache = next_decoder_cache
-        # End of fix for AttributeError
+        if next_decoder_cache is not None:
+            use_legacy_cache = getattr(self.config, 'use_legacy_cache', False)
+            if use_legacy_cache:
+                final_next_cache = next_decoder_cache.to_legacy_cache() if hasattr(next_decoder_cache, 'to_legacy_cache') else next_decoder_cache
+            else:
+                final_next_cache = next_decoder_cache
 
         if not return_dict:
             return (hidden_states, final_next_cache, all_hidden_states, all_self_attentions)
 
-        # Return a dictionary similar to Hugging Face BaseModelOutputWithPastAndCrossAttentions
         from transformers.modeling_outputs import BaseModelOutputWithPast
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
@@ -237,7 +175,6 @@ class BidirectionalMistralModel(PreTrainedModel):
             attentions=all_self_attentions,
         )
 
-
 class NVEmbedModel(PreTrainedModel):
     config_class = NVEmbedConfig
     base_model_prefix = "embedding_model"
@@ -245,35 +182,26 @@ class NVEmbedModel(PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.config = config
-        # Assuming embedding_model is a BidirectionalMistralModel
         self.embedding_model = BidirectionalMistralModel(config.embedding_model_config)
         self.latent_attention_model = LatentAttentionModel(config.latent_attention_config)
-        self.tokenizer = None # Will be set during model loading/initialization
-        self.padding_side = "right" # Default, adjust if needed
-        self.is_mask_instruction = True # Default, adjust if needed
-
-        # Initialize weights and apply final processing
+        self.tokenizer = None
+        self.padding_side = "right"
+        self.is_mask_instruction = True
         self.post_init()
 
     def _init_weights(self, module):
         """Initialize the weights"""
-        # This is a placeholder; real models have more complex initialization
         if isinstance(module, (nn.Linear, nn.Embedding)):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
         if isinstance(module, nn.Linear) and module.bias is not None:
             module.bias.data.zero_()
 
     def prepare_kwargs_from_batch(self, batch_dict, instruction_lens, device):
-        """
-        Prepares keyword arguments for the model's forward pass.
-        This is a placeholder and should align with your actual implementation.
-        """
+        """Prepares keyword arguments for the model's forward pass."""
         features = NVEmbedFeatures()
         features["input_ids"] = batch_dict["input_ids"].to(device)
         features["attention_mask"] = batch_dict["attention_mask"].to(device)
-        # You might need to generate pool_mask here if it's not in batch_dict
-        # For simplicity, we'll assume it's not needed for basic operation or is handled internally
-        features["pool_mask"] = None # Placeholder, adjust if needed
+        features["pool_mask"] = None
         return features
 
     @torch.no_grad()
@@ -306,15 +234,13 @@ class NVEmbedModel(PreTrainedModel):
         
         autocast_ctx = torch.autocast if torch.cuda.is_available() else nullcontext
         with autocast_ctx("cuda"):
-            ## decoder only layer
             outputs = self.embedding_model(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
-                output_attentions=False,       # Set to False due to SDPA warning
-                output_hidden_states=False,    # Set to False to save memory
+                output_attentions=False,
+                output_hidden_states=False,
                 return_dict=True,
             )
-            ## latent attention layer
             embeds = self.latent_attention_model(
                 outputs.last_hidden_state,
                 pool_mask,
@@ -323,116 +249,610 @@ class NVEmbedModel(PreTrainedModel):
             return (embeds,)
         return {"sentence_embeddings": embeds}
 
-# AutoModel Register (assuming these are part of your setup)
-# AutoModel.register(NVEmbedConfig, NVEmbedModel)
-# AutoModel.register(LatentAttentionConfig, LatentAttentionModel)
-# AutoModel.register(BidirectionalMistralConfig, BidirectionalMistralModel)
+@dataclass
+class FilteringConfig:
+    """Configuration for the filtering pipeline"""
+    min_text_length: int = 50
+    max_text_length: int = 8192
+    min_quality_score: float = 0.3
+    toxicity_threshold: float = 0.7
+    min_informativeness_score: float = 0.4
+    diversity_threshold: float = 0.6
+    n_clusters: int = 50
+    outlier_threshold: float = 0.8
+    quality_weight: float = 0.3
+    informativeness_weight: float = 0.3
+    diversity_weight: float = 0.2
+    safety_weight: float = 0.2
+    batch_size: int = 32
+    use_cache: bool = True
+    enable_preselect: bool = True
+    enable_toxicity_filter: bool = True
+    enable_length_filter: bool = True
+    enable_informativeness_filter: bool = True
 
-# Register for auto class (assuming these are part of your setup)
-# NVEmbedModel.register_for_auto_class("AutoModel")
-# LatentAttentionModel.register_for_auto_class("AutoModel")
-# BidirectionalMistralModel.register_for_auto_class("AutoModel")
-
-# --- End of modeling_nvembed.py content (simulated) ---
-
-
-# --- Start of NV_retriever.py content ---
-
-# This function is designed to handle batching internally
-def get_embeddings(model, inputs: Dict[str, torch.Tensor], batch_size: int = 32):
-    """
-    Generates embeddings for a batch of inputs, processing them in smaller sub-batches
-    to manage memory usage.
-
-    Args:
-        model: The embedding model (e.g., NVEmbedModel instance).
-        inputs (Dict): A dictionary containing input_ids, attention_mask, etc.
-                       These should be PyTorch tensors already on the correct device.
-        batch_size (int): The maximum number of samples to process at once.
-                          Reduce this value if you encounter 'Killed' errors.
-
-    Returns:
-        torch.Tensor: The concatenated sentence embeddings for all inputs.
-    """
-    all_embeddings = []
+class ComprehensiveDataFilter:
+    """Multi-stage data filtering system for quality, safety, and informativeness."""
     
-    # Assuming 'input_ids' is the primary key to determine the number of samples
+    def __init__(self, config: FilteringConfig = None):
+        self.config = config or FilteringConfig()
+        self.preselect_model = None
+        self.toxicity_patterns = self._compile_toxicity_patterns()
+        self.quality_metrics = QualityMetrics()
+        self.informativeness_scorer = InformativenessScorer()
+        self.clustering_filter = ClusteringFilter(
+            n_clusters=self.config.n_clusters,
+            outlier_threshold=self.config.outlier_threshold
+        )
+        
+        self.stats = {
+            'total_processed': 0,
+            'passed_preselect': 0,
+            'passed_safety': 0,
+            'passed_quality': 0,
+            'passed_informativeness': 0,
+            'passed_clustering': 0,
+            'final_filtered': 0,
+            'stage_timings': defaultdict(list)
+        }
+        
+        self._initialize_models()
+    
+    def _initialize_models(self):
+        """Initialize filtering models"""
+        if self.config.enable_preselect:
+            self._load_preselect_model()
+    
+    def _load_preselect_model(self):
+        """Load FastText preselect model"""
+        from huggingface_hub import hf_hub_download
+        model_path = hf_hub_download(
+            repo_id="hkust-nlp/preselect-fasttext-classifier",
+            filename="PreSelect-classifier.bin"
+        )
+        self.preselect_model = fasttext.load_model(model_path)
+    
+    def _compile_toxicity_patterns(self):
+        """Compile regex patterns for toxicity detection"""
+        patterns = {
+            'profanity': [
+                r'\b(fuck|shit|bitch|asshole|dick|pussy|cunt)\b',
+                r'\b(damn|hell|goddamn)\b'
+            ],
+            'hate_speech': [
+                r'\b(kill yourself|die|hate you|stupid|idiot|moron)\b',
+                r'\b(racist|sexist|homophobic)\b'
+            ],
+            'violence': [
+                r'\b(punch|hit|kill|murder|attack|fight)\b',
+                r'\b(weapon|gun|knife|bomb)\b'
+            ],
+            'sexual_content': [
+                r'\b(sex|porn|nude|naked|penis|vagina)\b',
+                r'\b(erotic|sexual|intimate)\b'
+            ]
+        }
+        
+        compiled_patterns = {}
+        for category, pattern_list in patterns.items():
+            compiled_patterns[category] = [
+                re.compile(pattern, re.IGNORECASE) for pattern in pattern_list
+            ]
+        
+        return compiled_patterns
+    
+    def preselect_filter(self, text: str) -> Dict[str, Any]:
+        """Stage 1: Preselect filtering using FastText"""
+        if not self.config.enable_preselect or not self.preselect_model:
+            return {'passed': True, 'score': 1.0, 'reason': 'preselect_disabled'}
+        
+        cleaned_text = text.replace('\n', ' ').replace('\t', ' ')
+        predictions = self.preselect_model.predict(cleaned_text, k=1)
+        label = predictions[0][0]
+        confidence = predictions[1][0]
+        
+        passed = label == "__label__1" and confidence >= 0.99
+        
+        return {
+            'passed': passed,
+            'score': confidence if passed else 1.0 - confidence,
+            'label': label,
+            'confidence': confidence,
+            'reason': 'preselect_pass' if passed else 'preselect_fail'
+        }
+    
+    def safety_filter(self, text: str) -> Dict[str, Any]:
+        """Stage 2: Safety filtering (toxicity detection)"""
+        if not self.config.enable_toxicity_filter:
+            return {'passed': True, 'score': 1.0, 'reason': 'safety_disabled'}
+        
+        toxicity_score = 0.0
+        detected_categories = []
+        text_lower = text.lower()
+        
+        for category, patterns in self.toxicity_patterns.items():
+            for pattern in patterns:
+                if pattern.search(text_lower):
+                    toxicity_score += 0.3
+                    detected_categories.append(category)
+        
+        words = text.split()
+        if len(words) > 10:
+            word_counts = Counter(words)
+            max_repetition = max(word_counts.values()) if word_counts else 0
+            if max_repetition > len(words) * 0.3:
+                toxicity_score += 0.2
+                detected_categories.append('excessive_repetition')
+        
+        if len(text) > 20 and text.isupper():
+            toxicity_score += 0.1
+            detected_categories.append('excessive_caps')
+        
+        toxicity_score = min(toxicity_score, 1.0)
+        safety_score = 1.0 - toxicity_score
+        passed = toxicity_score < self.config.toxicity_threshold
+        
+        return {
+            'passed': passed,
+            'score': safety_score,
+            'toxicity_score': toxicity_score,
+            'detected_categories': detected_categories,
+            'reason': 'safety_pass' if passed else 'safety_fail'
+        }
+    
+    def quality_assessment(self, text: str) -> Dict[str, Any]:
+        """Stage 3: Quality assessment"""
+        if self.config.enable_length_filter:
+            if len(text) < self.config.min_text_length:
+                return {'passed': False, 'score': 0.0, 'reason': 'too_short'}
+            if len(text) > self.config.max_text_length:
+                return {'passed': False, 'score': 0.0, 'reason': 'too_long'}
+        
+        quality_scores = self.quality_metrics.assess_quality(text)
+        overall_quality = sum(quality_scores.values()) / len(quality_scores)
+        passed = overall_quality >= self.config.min_quality_score
+        
+        return {
+            'passed': passed,
+            'score': overall_quality,
+            'breakdown': quality_scores,
+            'reason': 'quality_pass' if passed else 'quality_fail'
+        }
+    
+    def informativeness_assessment(self, text: str, corpus_stats: Dict = None) -> Dict[str, Any]:
+        """Stage 4: Informativeness assessment"""
+        if not self.config.enable_informativeness_filter:
+            return {'passed': True, 'score': 1.0, 'reason': 'informativeness_disabled'}
+        
+        informativeness_scores = self.informativeness_scorer.score_text(text, corpus_stats)
+        overall_informativeness = sum(informativeness_scores.values()) / len(informativeness_scores)
+        passed = overall_informativeness >= self.config.min_informativeness_score
+        
+        return {
+            'passed': passed,
+            'score': overall_informativeness,
+            'breakdown': informativeness_scores,
+            'reason': 'informativeness_pass' if passed else 'informativeness_fail'
+        }
+    
+    def filter_sample(self, text: str, sample_id: str = None, corpus_stats: Dict = None) -> Dict[str, Any]:
+        """Filter a single sample through all stages"""
+        result = {
+            'sample_id': sample_id,
+            'text': text,
+            'passed_overall': False,
+            'final_score': 0.0,
+            'stage_results': {},
+            'filtering_reason': None
+        }
+        
+        # Stage 1: Preselect
+        preselect_result = self.preselect_filter(text)
+        result['stage_results']['preselect'] = preselect_result
+        
+        if not preselect_result['passed']:
+            result['filtering_reason'] = preselect_result['reason']
+            return result
+        
+        self.stats['passed_preselect'] += 1
+        
+        # Stage 2: Safety
+        safety_result = self.safety_filter(text)
+        result['stage_results']['safety'] = safety_result
+        
+        if not safety_result['passed']:
+            result['filtering_reason'] = safety_result['reason']
+            return result
+        
+        self.stats['passed_safety'] += 1
+        
+        # Stage 3: Quality
+        quality_result = self.quality_assessment(text)
+        result['stage_results']['quality'] = quality_result
+        
+        if not quality_result['passed']:
+            result['filtering_reason'] = quality_result['reason']
+            return result
+        
+        self.stats['passed_quality'] += 1
+        
+        # Stage 4: Informativeness
+        informativeness_result = self.informativeness_assessment(text, corpus_stats)
+        result['stage_results']['informativeness'] = informativeness_result
+        
+        if not informativeness_result['passed']:
+            result['filtering_reason'] = informativeness_result['reason']
+            return result
+        
+        self.stats['passed_informativeness'] += 1
+        
+        # Calculate final score
+        final_score = (
+            self.config.quality_weight * quality_result['score'] +
+            self.config.informativeness_weight * informativeness_result['score'] +
+            self.config.safety_weight * safety_result['score'] +
+            0.1 * preselect_result['score']
+        )
+        
+        result['passed_overall'] = True
+        result['final_score'] = final_score
+        result['filtering_reason'] = 'passed_all_stages'
+        self.stats['final_filtered'] += 1
+        
+        return result
+    
+    def filter_dataset(self, dataset: List[Dict], max_samples: int = None) -> List[Dict]:
+        """Filter entire dataset and return filtered samples"""
+        filtered_samples = []
+        
+        sample_count = 0
+        for i, sample in enumerate(dataset):
+            if max_samples and sample_count >= max_samples:
+                break
+            
+            text = sample.get('text', '')
+            if not text:
+                continue
+            
+            filter_result = self.filter_sample(text, sample_id=str(i))
+            
+            if filter_result['passed_overall']:
+                filtered_samples.append({
+                    'original_sample': sample,
+                    'filter_result': filter_result
+                })
+            
+            sample_count += 1
+            self.stats['total_processed'] += 1
+        
+        # Apply clustering-based filtering
+        if filtered_samples:
+            clustering_results = self.clustering_filter.filter_samples(filtered_samples)
+            
+            final_filtered = []
+            for sample, cluster_result in zip(filtered_samples, clustering_results):
+                if cluster_result['keep']:
+                    sample['cluster_info'] = cluster_result
+                    final_filtered.append(sample)
+            
+            self.stats['passed_clustering'] = len(final_filtered)
+            filtered_samples = final_filtered
+        
+        return filtered_samples
+
+class QualityMetrics:
+    """Text quality assessment metrics"""
+    
+    def assess_quality(self, text: str) -> Dict[str, float]:
+        """Assess various quality aspects of text"""
+        return {
+            'readability': self._readability_score(text),
+            'coherence': self._coherence_score(text),
+            'vocabulary_diversity': self._vocabulary_diversity(text),
+            'grammatical_correctness': self._grammatical_score(text),
+            'information_density': self._information_density(text)
+        }
+    
+    def _readability_score(self, text: str) -> float:
+        """Simple readability score based on sentence and word length"""
+        sentences = text.split('.')
+        words = text.split()
+        
+        if not sentences or not words:
+            return 0.0
+        
+        avg_sentence_length = len(words) / len(sentences)
+        avg_word_length = sum(len(word) for word in words) / len(words)
+        
+        sentence_score = max(0, 1 - abs(avg_sentence_length - 17.5) / 17.5)
+        word_score = max(0, 1 - abs(avg_word_length - 5) / 5)
+        
+        return (sentence_score + word_score) / 2
+    
+    def _coherence_score(self, text: str) -> float:
+        """Assess text coherence based on word repetition and flow"""
+        words = text.lower().split()
+        if len(words) < 10:
+            return 0.0
+        
+        word_counts = Counter(words)
+        total_words = len(words)
+        unique_words = len(word_counts)
+        
+        diversity_ratio = unique_words / total_words
+        coherence_score = 1 - abs(diversity_ratio - 0.75) / 0.75
+        
+        return max(0, coherence_score)
+    
+    def _vocabulary_diversity(self, text: str) -> float:
+        """Measure vocabulary diversity (TTR - Type Token Ratio)"""
+        words = text.lower().split()
+        if len(words) < 5:
+            return 0.0
+        
+        unique_words = len(set(words))
+        total_words = len(words)
+        
+        ttr = unique_words / math.sqrt(total_words)
+        return min(1.0, ttr / 10)
+    
+    def _grammatical_score(self, text: str) -> float:
+        """Simple grammatical correctness heuristics"""
+        score = 1.0
+        
+        if not re.search(r'[.!?]', text):
+            score -= 0.3
+        
+        sentences = re.split(r'[.!?]', text)
+        capitalized_sentences = sum(1 for s in sentences if s.strip() and s.strip()[0].isupper())
+        if sentences and capitalized_sentences / len(sentences) < 0.5:
+            score -= 0.2
+        
+        if re.search(r'[.!?]{3,}', text):
+            score -= 0.2
+        
+        return max(0, score)
+    
+    def _information_density(self, text: str) -> float:
+        """Measure information density (content words vs function words)"""
+        words = text.lower().split()
+        if not words:
+            return 0.0
+        
+        function_words = {
+            'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 
+            'for', 'of', 'with', 'by', 'is', 'are', 'was', 'were', 'be', 
+            'been', 'being', 'have', 'has', 'had', 'do', 'does', 'did'
+        }
+        
+        content_words = sum(1 for word in words if word not in function_words)
+        density = content_words / len(words)
+        
+        return min(1.0, density * 2)
+
+class InformativenessScorer:
+    """Assess text informativeness and novelty"""
+    
+    def score_text(self, text: str, corpus_stats: Dict = None) -> Dict[str, float]:
+        """Score text informativeness"""
+        return {
+            'novelty': self._novelty_score(text, corpus_stats),
+            'specificity': self._specificity_score(text),
+            'educational_value': self._educational_value(text),
+            'technical_depth': self._technical_depth(text),
+            'conceptual_richness': self._conceptual_richness(text)
+        }
+    
+    def _novelty_score(self, text: str, corpus_stats: Dict = None) -> float:
+        """Assess novelty compared to corpus (if available)"""
+        if not corpus_stats:
+            return 0.5
+        return 0.7
+    
+    def _specificity_score(self, text: str) -> float:
+        """Measure specificity vs generality"""
+        words = text.lower().split()
+        if not words:
+            return 0.0
+        
+        specific_indicators = [
+            r'\b\d+\b',
+            r'\b[A-Z][a-z]*[A-Z]\w*\b',
+            r'\b\w+\.\w+\b',
+            r'\b\w+://\w+\b',
+            r'\b\w+@\w+\.\w+\b',
+        ]
+        
+        specific_count = 0
+        for pattern in specific_indicators:
+            specific_count += len(re.findall(pattern, text))
+        
+        return min(1.0, specific_count / len(words) * 10)
+    
+    def _educational_value(self, text: str) -> float:
+        """Assess educational/instructional value"""
+        educational_patterns = [
+            r'\b(learn|teach|explain|understand|demonstrate|example|tutorial)\b',
+            r'\b(how to|step by step|first|second|third|finally)\b',
+            r'\b(definition|concept|principle|theory|method)\b',
+            r'\b(because|therefore|thus|hence|consequently)\b',
+        ]
+        
+        educational_score = 0
+        for pattern in educational_patterns:
+            matches = len(re.findall(pattern, text, re.IGNORECASE))
+            educational_score += matches
+        
+        return min(1.0, educational_score / len(text.split()) * 5)
+    
+    def _technical_depth(self, text: str) -> float:
+        """Measure technical content depth"""
+        technical_indicators = [
+            r'\b(algorithm|function|class|method|variable|parameter)\b',
+            r'\b(implementation|optimization|architecture|framework)\b',
+            r'\b(data|analysis|model|system|process|structure)\b',
+            r'\b(performance|efficiency|scalability|reliability)\b',
+        ]
+        
+        technical_score = 0
+        for pattern in technical_indicators:
+            matches = len(re.findall(pattern, text, re.IGNORECASE))
+            technical_score += matches
+        
+        return min(1.0, technical_score / len(text.split()) * 3)
+    
+    def _conceptual_richness(self, text: str) -> float:
+        """Measure conceptual richness and complexity"""
+        sentences = text.split('.')
+        if not sentences:
+            return 0.0
+        
+        complex_patterns = [
+            r'\b(relationship|connection|correlation|causation)\b',
+            r'\b(abstract|concrete|theoretical|practical)\b',
+            r'\b(analysis|synthesis|evaluation|comparison)\b',
+            r'\b(implication|consequence|significance|importance)\b',
+        ]
+        
+        conceptual_score = 0
+        for pattern in complex_patterns:
+            matches = len(re.findall(pattern, text, re.IGNORECASE))
+            conceptual_score += matches
+        
+        return min(1.0, conceptual_score / len(sentences) * 2)
+
+class ClusteringFilter:
+    """Clustering-based outlier detection and diversity filtering"""
+    
+    def __init__(self, n_clusters: int = 50, outlier_threshold: float = 0.8):
+        self.n_clusters = n_clusters
+        self.outlier_threshold = outlier_threshold
+        self.scaler = StandardScaler()
+        self.kmeans = None
+        
+    def filter_samples(self, samples: List[Dict]) -> List[Dict]:
+        """Filter samples using clustering-based outlier detection"""
+        if len(samples) < self.n_clusters:
+            return [{'keep': True, 'reason': 'insufficient_samples', 'cluster_id': -1, 'distance': 0.0}] * len(samples)
+        
+        features = []
+        for sample in samples:
+            filter_result = sample['filter_result']
+            feature_vector = self._extract_features(filter_result)
+            features.append(feature_vector)
+        
+        features_normalized = self.scaler.fit_transform(features)
+        
+        n_clusters = min(self.n_clusters, len(samples) // 2)
+        self.kmeans = KMeans(n_clusters=n_clusters, random_state=42)
+        cluster_labels = self.kmeans.fit_predict(features_normalized)
+        
+        distances = []
+        for i, (features_norm, label) in enumerate(zip(features_normalized, cluster_labels)):
+            center = self.kmeans.cluster_centers_[label]
+            distance = np.linalg.norm(features_norm - center)
+            distances.append(distance)
+        
+        distance_threshold = np.percentile(distances, self.outlier_threshold * 100)
+        
+        results = []
+        for i, (distance, cluster_id) in enumerate(zip(distances, cluster_labels)):
+            keep = distance <= distance_threshold
+            results.append({
+                'keep': keep,
+                'reason': 'cluster_inlier' if keep else 'cluster_outlier',
+                'cluster_id': int(cluster_id),
+                'distance': float(distance),
+                'distance_threshold': float(distance_threshold)
+            })
+        
+        return results
+    
+    def _extract_features(self, filter_result: Dict) -> List[float]:
+        """Extract numerical features from filter results"""
+        features = []
+        stage_results = filter_result.get('stage_results', {})
+        
+        features.append(stage_results.get('preselect', {}).get('score', 0.0))
+        features.append(stage_results.get('safety', {}).get('score', 0.0))
+        features.append(stage_results.get('quality', {}).get('score', 0.0))
+        features.append(stage_results.get('informativeness', {}).get('score', 0.0))
+        
+        quality_breakdown = stage_results.get('quality', {}).get('breakdown', {})
+        features.extend([
+            quality_breakdown.get('readability', 0.0),
+            quality_breakdown.get('coherence', 0.0),
+            quality_breakdown.get('vocabulary_diversity', 0.0),
+            quality_breakdown.get('grammatical_correctness', 0.0),
+            quality_breakdown.get('information_density', 0.0)
+        ])
+        
+        info_breakdown = stage_results.get('informativeness', {}).get('breakdown', {})
+        features.extend([
+            info_breakdown.get('novelty', 0.0),
+            info_breakdown.get('specificity', 0.0),
+            info_breakdown.get('educational_value', 0.0),
+            info_breakdown.get('technical_depth', 0.0),
+            info_breakdown.get('conceptual_richness', 0.0)
+        ])
+        
+        text_length = len(filter_result.get('text', ''))
+        features.extend([
+            min(1.0, text_length / 1000),
+            filter_result.get('final_score', 0.0)
+        ])
+        
+        return features
+
+def get_embeddings(model, inputs: Dict[str, torch.Tensor], batch_size: int = 32):
+    """Generate embeddings for filtered text samples."""
+    all_embeddings = []
     num_samples = inputs['input_ids'].shape[0]
-    device = next(model.parameters()).device # Get model's current device
+    device = next(model.parameters()).device
 
     for i in range(0, num_samples, batch_size):
         batch_inputs = {}
         for key, value in inputs.items():
             if isinstance(value, torch.Tensor):
-                # Ensure batch is on the correct device
                 batch_inputs[key] = value[i:i + batch_size].to(device)
             else:
-                batch_inputs[key] = value # Keep other types as is
+                batch_inputs[key] = value
 
-        try:
-            # Ensure only relevant keys are passed to the model's forward method
-            # based on NVEmbedModel's forward signature
-            filtered_batch_inputs = {
-                k: v for k, v in batch_inputs.items()
-                if k in ['input_ids', 'attention_mask', 'pool_mask']
-            }
-            
-            outputs = model(**filtered_batch_inputs)
+        filtered_batch_inputs = {
+            k: v for k, v in batch_inputs.items()
+            if k in ['input_ids', 'attention_mask', 'pool_mask']
+        }
+        
+        outputs = model(**filtered_batch_inputs)
 
-            # Assuming the output structure is {'sentence_embeddings': embeds}
-            if isinstance(outputs, dict) and 'sentence_embeddings' in outputs:
-                batch_emb = outputs['sentence_embeddings']
-            else:
-                # Fallback if output structure is different (e.g., a tuple)
-                batch_emb = outputs[0] # Assuming embeddings are the first element
+        if isinstance(outputs, dict) and 'sentence_embeddings' in outputs:
+            batch_emb = outputs['sentence_embeddings']
+        else:
+            batch_emb = outputs[0]
 
-            all_embeddings.append(batch_emb.cpu()) # Move to CPU to free GPU memory
-            
-            # Explicitly clear CUDA cache after each batch
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
+        all_embeddings.append(batch_emb.cpu())
+        
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
-        except RuntimeError as e:
-            print(f"Error processing batch {i} to {i+batch_size}: {e}")
-            # Consider more sophisticated error handling or logging
-            break # Stop processing if an error occurs
-
-    # Concatenate all embeddings from CPU
     if all_embeddings:
         return torch.cat(all_embeddings, dim=0)
     else:
-        # Return an empty tensor with the correct embedding dimension if no embeddings were generated
-        # You might need to get the embedding dimension from model.config.hidden_size or similar
-        # For now, returning a 0-dim tensor. Adjust if you know the exact dim.
-        return torch.empty(0, 768) # Placeholder: 768 is a common hidden size
-
-
-# --- Main script execution (example usage) ---
+        return torch.empty(0, 768)
 
 if __name__ == "__main__":
-    # --- Placeholder for your actual setup ---
-    # You need to replace these with your actual model loading, tokenizer, data, etc.
-    # Example:
-    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    # model_name = "your_model_path_or_name"
-    # tokenizer = AutoTokenizer.from_pretrained(model_name)
-    # model = AutoModel.from_pretrained(model_name) # This would load your NVEmbedModel if registered correctly
-    # model.to(device)
-
-    # Dummy setup for demonstration
-    tokenizer = AutoTokenizer.from_pretrained("gpt2") # Use GPT-2 tokenizer for ClimbLab dataset
+    # Load tokenizer and model
+    tokenizer = AutoTokenizer.from_pretrained("gpt2")
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
-    temp_tokenizer = tokenizer # Assuming temp_tokenizer is the same or similar
 
-    class DummyConfig(PretrainedConfig): # Inherit from PretrainedConfig
+    class DummyConfig(PretrainedConfig):
         def __init__(self, vocab_size, **kwargs):
-            super().__init__(**kwargs) # Call parent constructor
+            super().__init__(**kwargs)
             self.hidden_size = 768
             self.num_hidden_layers = 2
             self.vocab_size = vocab_size
             self.initializer_range = 0.02
-            # Ensure these are instances of their respective config classes
             self.embedding_model_config = BidirectionalMistralConfig(
                 hidden_size=self.hidden_size,
                 num_hidden_layers=self.num_hidden_layers,
@@ -440,134 +860,90 @@ if __name__ == "__main__":
                 initializer_range=self.initializer_range
             )
             self.latent_attention_config = LatentAttentionConfig(
-                hidden_size=self.hidden_size # LatentAttentionConfig might need hidden_size
+                hidden_size=self.hidden_size
             )
-            self.use_legacy_cache = False # Important for BidirectionalMistralModel
+            self.use_legacy_cache = False
 
     config = DummyConfig(vocab_size=len(tokenizer))
-    
-    # Manually instantiate models for demonstration since AutoModel.register might not be active in this context
     model = NVEmbedModel(config)
     model.tokenizer = tokenizer
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
 
+    # Configuration
     max_length = 512
-    # --- MODIFICATION: Specify a directory for output_path ---
-    output_path = "./artifacts/embeddings_output.json" 
-    # --- END OF MODIFICATION ---
-    model_name = "NV-Embed-v2"
-    num_epochs = 3
-    test_query = "What is the capital of France?"
-    search_top_k = 3
-
-    # --- Dataset Configuration ---
-    # Set your JSONL dataset path here
-    dataset_path = "data/climblab_processed_clusters.jsonl"  # Set this to your dataset file path, e.g., "data/your_dataset.jsonl"
-    text_field = "detokenized_text"  # The field name containing the text in your dataset
+    output_path = "./artifacts/embeddings_output.json"
+    dataset_path = "data/climblab_processed_clusters.jsonl"
+    text_field = "detokenized_text"
     
-    # Load JSONL dataset or use dummy data
+    # Load dataset
     if dataset_path and os.path.exists(dataset_path):
-        print(f"Loading JSONL dataset from: {dataset_path}")
         sample = load_jsonl(dataset_path)
     else:
-        print("No dataset path provided or file not found. Using dummy data for demonstration.")
         sample = [
-            {"text": "The quick brown fox jumps over the lazy dog."},
-            {"text": "Artificial intelligence is transforming industries worldwide."},
-            {"text": "Paris is known for its Eiffel Tower and delicious pastries."},
-            {"text": "Machine learning is a subset of AI."},
-            {"text": "Dogs are loyal companions."},
-            {"text": "Deep learning models require vast amounts of data."},
-            {"text": "The Seine river flows through Paris."},
-            {"text": "Computers are becoming increasingly powerful."},
-            {"text": "France is a country in Western Europe."},
-            {"text": "Neural networks are inspired by the human brain."},
+            {"text": "Machine learning algorithms require careful preprocessing of data to achieve optimal performance."},
+            {"text": "Deep neural networks have revolutionized natural language processing through transformer architectures."},
+            {"text": "Python is a popular programming language used in data science and web development."},
+            {"text": "AI is good."},
+            {"text": "This is a test sample for filtering evaluation."},
         ]
     
-    training_data = sample  # Use the loaded dataset as training data
-    # --- End of Dataset Configuration ---
-
-
-    print("Generating embeddings with fine-tuned model...")
-    model.eval() # Set model to evaluation mode
-
-    docs = []
-    # Process all sample texts to get the documents
-    for row in sample:
-        if "tokens" in row:
-            docs.append(temp_tokenizer.decode(row["tokens"], skip_special_tokens=True))
-        else:
-            # Use the specified text field, with fallback to "text" and then empty string
-            text_content = row.get(text_field, row.get("text", ""))
-            docs.append(text_content)
-
-    # --- Batching for document embeddings ---
-    all_doc_inputs = tokenizer(
-        docs,
-        truncation=True,
-        padding='longest', # Pad to the longest sequence in the batch
-        max_length=max_length,
-        return_tensors='pt'
+    # Initialize filtering system
+    filtering_config = FilteringConfig(
+        min_text_length=50,
+        max_text_length=4096,
+        min_quality_score=0.3,
+        toxicity_threshold=0.7,
+        min_informativeness_score=0.2,
+        n_clusters=min(10, len(sample) // 3),
+        outlier_threshold=0.8
     )
-
-    # Move all inputs to the device once
-    all_doc_inputs = {k: v.to(device) for k, v in all_doc_inputs.items()}
-
-    embeddings_list = []
-    with torch.no_grad():
-        # Call get_embeddings once with all tokenized documents
-        # The get_embeddings function will handle internal sub-batching.
-        # Adjust inference_batch_size based on your GPU memory.
-        inference_batch_size = 4 # Start with a small batch size, e.g., 4, 8, 16
-        
-        embeddings_tensor = get_embeddings(model, all_doc_inputs, batch_size=inference_batch_size)
-        
-        # Move the final embeddings to CPU and convert to numpy
-        embeddings_np = embeddings_tensor.cpu().numpy()
-
-    print(f"Generated embeddings with shape: {embeddings_np.shape}")
-
-    if output_path:
-        print(f"Saving artifacts to {output_path}...")
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
-        embeddings_file = output_path.replace('.json', '_embeddings.npy')
-        np.save(embeddings_file, embeddings_np)
-        
-        with open(output_path, 'w') as f:
-            data = {
-                'texts': docs,
-                'embedding_shape': embeddings_np.shape,
-                'embedding_file': embeddings_file,
-                'model_used': f"{model_name}_dora_finetuned",
-                'training_samples': len(training_data),
-                'epochs': num_epochs
-            }
-            json.dump(data, f, indent=2)
-        print(f"Embeddings saved to {embeddings_file}")
-        print(f"Metadata saved to {output_path}")
-        
+    
+    data_filter = ComprehensiveDataFilter(config=filtering_config)
+    
+    # Apply filtering
+    filtered_samples = data_filter.filter_dataset(sample, max_samples=1000)
+    
+    # Extract text from filtered samples
+    docs = []
+    for sample_data in filtered_samples:
+        if "tokens" in sample_data['original_sample']:
+            docs.append(tokenizer.decode(sample_data['original_sample']["tokens"], skip_special_tokens=True))
+        else:
+            text_content = sample_data['original_sample'].get(text_field, sample_data['original_sample'].get("text", ""))
+            docs.append(text_content)
+    
+    # Generate embeddings for filtered data
     if docs:
-        print(f"\n--- Searching with DoRA fine-tuned model: '{test_query}' ---")
-        query_inputs = tokenizer(test_query, truncation=True, padding=True, max_length=max_length, return_tensors='pt')
-        query_inputs = {k: v.to(device) for k, v in query_inputs.items()}
+        model.eval()
+        all_doc_inputs = tokenizer(
+            docs,
+            truncation=True,
+            padding='longest',
+            max_length=max_length,
+            return_tensors='pt'
+        )
+        
+        all_doc_inputs = {k: v.to(device) for k, v in all_doc_inputs.items()}
         
         with torch.no_grad():
-            # Use the same get_embeddings function for the query,
-            # ensuring it handles the batching (even for a single query, it's consistent)
-            query_embedding = get_embeddings(model, query_inputs, batch_size=1).cpu().numpy()
+            embeddings_tensor = get_embeddings(model, all_doc_inputs, batch_size=4)
+            embeddings_np = embeddings_tensor.cpu().numpy()
+        
+        # Save results
+        if output_path:
+            os.makedirs(os.path.dirname(output_path), exist_ok=True)
+            embeddings_file = output_path.replace('.json', '_embeddings.npy')
+            np.save(embeddings_file, embeddings_np)
             
-        similarities = np.dot(embeddings_np, query_embedding.T).flatten()
-        top_indices = np.argsort(similarities)[::-1][:search_top_k]
-
-        results = []
-        for i, idx in enumerate(top_indices):
-            results.append({
-                'rank': i + 1,
-                'text': docs[idx],
-                'similarity': float(similarities[idx])
-            })
-
-        for result in results:
-            print(f"\nRank {result['rank']}: Similarity={result['similarity']:.3f}")
-            print(f"Preview: {result['text'][:200]}...")
+            with open(output_path, 'w') as f:
+                data = {
+                    'texts': docs,
+                    'embedding_shape': embeddings_np.shape,
+                    'embedding_file': embeddings_file,
+                    'filtered_samples': len(filtered_samples),
+                    'total_processed': data_filter.stats['total_processed'],
+                    'retention_rate': len(filtered_samples) / data_filter.stats['total_processed'] if data_filter.stats['total_processed'] > 0 else 0,
+                    'timestamp': datetime.now().isoformat()
+                }
+                json.dump(data, f, indent=2)

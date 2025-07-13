@@ -20,16 +20,42 @@ tokenizer = AutoTokenizer.from_pretrained(model_name)
 if tokenizer.pad_token is None:
     tokenizer.pad_token = tokenizer.eos_token
 
+def format_training_text(example):
+    """Format dataset fields into training text"""
+    problem = example["problem"]
+    choices = example["choices"]
+    solution = example["solution"]
+    answer = example["answer"]
+    
+    # Create formatted text based on whether it's multiple choice or open-ended
+    if choices and len(choices) > 0:
+        # Multiple choice format
+        choices_text = "\n".join([f"{chr(65+i)}) {choice}" for i, choice in enumerate(choices)])
+        formatted_text = f"Problem: {problem}\n\nChoices:\n{choices_text}\n\nSolution: {solution}\n\nAnswer: {answer}"
+    else:
+        # Open-ended format
+        formatted_text = f"Problem: {problem}\n\nSolution: {solution}\n\nAnswer: {answer}"
+    
+    return {"text": formatted_text}
+
 def tokenize_function(examples):
-    return tokenizer(
+    tokenized = tokenizer(
         examples["text"],
         truncation=True,
-        padding=True,
+        padding=False,
         max_length=512,
-        return_tensors="pt"
+        return_tensors=None
     )
+    tokenized["labels"] = tokenized["input_ids"].copy()
+    return tokenized
 
-tokenized_dataset = dataset.map(tokenize_function, batched=True)
+# First format the dataset to create text field
+formatted_dataset = dataset.map(format_training_text)
+tokenized_dataset = formatted_dataset.map(
+    tokenize_function, 
+    batched=True,
+    remove_columns=formatted_dataset.column_names
+)
 
 dora_config = LoraConfig(
     r=16,
@@ -52,7 +78,7 @@ training_args = TrainingArguments(
     warmup_steps=500,
     logging_steps=50,
     save_steps=1000,
-    evaluation_strategy="steps",
+    eval_strategy="steps",
     eval_steps=1000,
     save_total_limit=2,
     remove_unused_columns=False,
