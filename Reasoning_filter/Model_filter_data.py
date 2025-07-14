@@ -46,10 +46,8 @@ class ModelBasedFilter:
         try:
             logger.info(f"Loading model: {self.model_name}")
             
-            # For now, use a generic tokenizer since "my_model" is placeholder
-            # In practice, you'd load your actual fine-tuned model
-            self.tokenizer = AutoTokenizer.from_pretrained("gpt2")
-            self.model = AutoModelForCausalLM.from_pretrained("gpt2").to(self.device)
+            self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+            self.model = AutoModelForCausalLM.from_pretrained(self.model_name).to(self.device)
             
             # Add special tokens if needed
             if self.tokenizer.pad_token is None:
