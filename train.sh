@@ -4,7 +4,7 @@
 # --- Configuration ---
 # Parses arguments
 model_name_or_path=data4elm/Llama-400M-12L
-initial_dataset_path=data/filtered_output
+initial_dataset_path=data/filtered_output/embeddings.jsonl
 output_dir=output_models/finetune_curriculum
 deepspeed_args="--master_port=11000"
 trust_remote_code=0
@@ -50,6 +50,15 @@ exp_id=finetune_with_curriculum_dora
 log_dir=${project_dir}/log/${exp_id}
 curriculum_data_dir=${project_dir}/curriculum_data
 mkdir -p ${output_dir} ${log_dir} ${curriculum_data_dir}
+
+# --- Step 0: Generate Embeddings ---
+echo "--- Generating embeddings... ---"
+python generate_embeddings.py
+if [ $? -ne 0 ]; then
+    echo "Error: Embedding generation failed."
+    exit 1
+fi
+echo "--- Embedding generation complete. ---"
 
 # --- Step 1: Prepare Curriculum Data ---
 echo "--- Preparing curriculum data... ---"

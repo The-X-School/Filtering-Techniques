@@ -14,11 +14,25 @@ from pathlib import Path
 import time
 from datetime import datetime
 from dataclasses import dataclass
+import warnings
 
 from transformers import AutoTokenizer, AutoModel, PreTrainedModel, PretrainedConfig
 import numpy as np
 import os
 import json
+from contextlib import contextmanager
+import sys
+
+@contextmanager
+def suppress_stderr():
+    """A context manager to temporarily suppress stderr."""
+    with open(os.devnull, 'w') as devnull:
+        original_stderr = sys.stderr
+        sys.stderr = devnull
+        try:
+            yield
+        finally:
+            sys.stderr = original_stderr
 
 def load_jsonl(file_path: str) -> List[Dict]:
     """Load a JSONL dataset from the specified file path."""
@@ -310,7 +324,8 @@ class ComprehensiveDataFilter:
             repo_id="hkust-nlp/preselect-fasttext-classifier",
             filename="PreSelect-classifier.bin"
         )
-        self.preselect_model = fasttext.load_model(model_path)
+        with suppress_stderr():
+            self.preselect_model = fasttext.load_model(model_path)
     
     def _compile_toxicity_patterns(self):
         """Compile regex patterns for toxicity detection"""
@@ -521,6 +536,8 @@ class ComprehensiveDataFilter:
                     'original_sample': sample,
                     'filter_result': filter_result
                 })
+            else:
+                print(f"Sample {i} filtered out. Reason: {filter_result.get('filtering_reason', 'Unknown')}")
             
             sample_count += 1
             self.stats['total_processed'] += 1
@@ -744,6 +761,9 @@ class ClusteringFilter:
         features_normalized = self.scaler.fit_transform(features)
         
         n_clusters = min(self.n_clusters, len(samples) // 2)
+        if n_clusters <= 0:
+            return [{'keep': True, 'reason': 'insufficient_samples_for_clustering', 'cluster_id': -1, 'distance': 0.0}] * len(samples)
+        
         self.kmeans = KMeans(n_clusters=n_clusters, random_state=42)
         cluster_labels = self.kmeans.fit_predict(features_normalized)
         
@@ -880,21 +900,22 @@ if __name__ == "__main__":
     if dataset_path and os.path.exists(dataset_path):
         sample = load_jsonl(dataset_path)
     else:
+        print(f"Dataset not found at {dataset_path}. Using a default sample dataset.")
         sample = [
-            {"text": "Machine learning algorithms require careful preprocessing of data to achieve optimal performance."},
-            {"text": "Deep neural networks have revolutionized natural language processing through transformer architectures."},
-            {"text": "Python is a popular programming language used in data science and web development."},
-            {"text": "AI is good."},
-            {"text": "This is a test sample for filtering evaluation."},
+            {"text": "This is a high-quality sentence that should pass the filters. It is long enough and has good vocabulary."},
+            {"text": "short"},
+            {"text": "This is another good sentence. It talks about machine learning and data science, which is informative."},
+            {"text": "I hate you, you are stupid and I will kill you."},
+            {"text": "This sentence is just a bunch of repeated words repeated words repeated words repeated words repeated words repeated words."},
         ]
     
     # Initialize filtering system
     filtering_config = FilteringConfig(
-        min_text_length=50,
+        min_text_length=10,
         max_text_length=4096,
-        min_quality_score=0.3,
+        min_quality_score=0.1,
         toxicity_threshold=0.7,
-        min_informativeness_score=0.2,
+        min_informativeness_score=0.1,
         n_clusters=min(10, len(sample) // 3),
         outlier_threshold=0.8
     )
@@ -947,3 +968,5 @@ if __name__ == "__main__":
                     'timestamp': datetime.now().isoformat()
                 }
                 json.dump(data, f, indent=2)
+    else:
+        print("All documents were filtered out. No embeddings will be generated and no output file will be created.")
