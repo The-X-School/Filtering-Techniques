@@ -40,12 +40,12 @@ def evaluate(dataset, instruction, ref_answer, criteria, desc, trunc_length, max
 
     for i in tqdm(range(num_batches), desc="Evaluating Data (batches)"):
         batch_docs = dataset[i*batch_size : (i+1)*batch_size]
-        
+
         prompts = []
         for doc in batch_docs:
-            detoken = detokenize(doc, gpt2tokenizer)
-            detoken = truncate_text(detoken, tokenizer, trunc_length)
-            
+            #  detoken = detokenize(doc, gpt2tokenizer)
+            detoken = truncate_text(doc, tokenizer, trunc_length)
+
             prompt = (
                 "Task Description: An instruction (might include an Input inside it), a response to evaluate, "
                 "a reference answer that gets a score of 5, and a score rubric representing evaluation criteria are given.\n"
@@ -66,54 +66,51 @@ def evaluate(dataset, instruction, ref_answer, criteria, desc, trunc_length, max
             prompts.append(prompt)
 
         outputs = pipe(prompts, max_new_tokens=max_new_tokens, do_sample=False)
-        
+
         for output, doc in zip(outputs, batch_docs):
             generated_text = output[0]['generated_text']
             match = re.search(r'\[RESULT\]:?\s*([1-5])', generated_text)
-            score = int(match.group(1)) if match else 3  # fallback score
+            score = int(match.group(1)) if match else 0  # fallback score
             scores.append((score, doc))
             print(score)
-                
+
     with open('scores.json', 'w') as f:
         json.dump(scores, f)
 
     return scores
 
 def main():
-    total_sample = 10
-    print("Step 0.1: Loading dataset...")
-    full_dataset = load_dataset("nvidia/ClimbLab", split="train", streaming=True)
 
-    # Convert to list of token lists
-    print("Step 0.2: Collecting sample...")
-    dataset = []
-    for i, item in enumerate(tqdm(full_dataset, desc="Collecting sample", total=total_sample)):
-        if i >= total_sample:
-            break
-        dataset.append(item)
+    with open("combined_clusters.json", "r", encoding="utf-8") as f:
+        combined_data = json.load(f)
+    # Reformat: extract the 'text' field from each item
+    dataset = [item["text"] for item in combined_data if "text" in item]
 
-    print("Step 0.3: Reformatting sample...")
-    for i, item in enumerate(tqdm(dataset, desc="Reformatting sample")):
-        dataset[i] = list(item["tokens"])
-    
-    print(f"Loaded {len(dataset)} documents")
+    instruction = (
+    "Evaluate the text based on how well it improves a language model's roleplaying abilities. "
+    "Be lenient and generous because this text comes from a dataset not built for roleplay: even if the response has only a small hint of roleplaying or minimal effort."
+    )
+    ref_ans = (
+    "Kael is known as a rogue who usually works alone. People say he’s cautious and doesn’t engage much with others unless necessary. "
+    "From what I’ve heard, he’s been through some tough times that have influenced how he acts now. "
+    "He seems to focus mostly on staying alive and making practical choices rather than getting caught up in feelings."
+    )
+    criteria = """Rate the response based on how much specific, identifiable context it includes — such as named people, places, events, or situations in any format like quiz, multiple choice questions, story, and more — that could help a language model generate more grounded or context-aware outputs. The format does not need to be narrative or fictional; quizzes, summaries, or fact-based content are all valid if they reflect specific scenarios from 1 to 5 no matter what."""
 
-    instruction = "Evaluate the text based on how well it can improve a language model's roleplaying abilities."
-    ref_ans = "[Setting: A dimly lit medieval tavern, crackling fireplace in the corner. Rain hammers the windows. The rogue, Kael, sits alone, hood shadowing his face, nursing a mug of bitter ale. A paladin named Seraphina enters, armor glinting, expression tense.]\n\n" \
-         "Seraphina: (striding up, tone clipped) You missed the rendezvous, Kael. Again. Three nights in a row.\n\n" \
-         "Kael: (without looking up) And yet, here you are. Safe, armored, and righteously pissed. I call that a win.\n\n" \
-         "Seraphina: (slams gauntlet on the table) People *died* waiting for you.\n\n" \
-         "Kael: (finally looks up, voice low) People die every day, Seraphina. That's the price of doing *your* kind of good.\n\n" \
-         "[She falters, anger simmering beneath her righteous indignation.] [...]"
-    criteria = "Roleplaying Quality: Does the response exhibit strong in-character consistency, immersive dialogue, and emotional or narrative depth in line with the given instruction?"
     desc = [
-    "The response rarely includes any roleplaying content. People and characters are mostly absent, with little to no dialogue or personality.",
-    "The response occasionally hints at roleplaying, mentioning people, characters, or setting briefly, but lacks dialogue or clear personality.",
-    "The response sometimes includes basic roleplaying elements like setting or people/characters, and may show a hint of dialogue or personality, but interaction remains limited.",
-    "The response often includes people, characters, and some dialogue. There’s interaction and a touch of personality, even if the writing is simple or not very detailed.",
-    "The response frequently includes roleplaying with people, characters, dialogue, and personality that help create a sense of interaction or story—without needing to be vivid or elaborate."
+    "The response does not reference any specific people, actions, or scenarios. It is fully generic or abstract, with no identifiable context.",
+
+    "The response includes some minimal or generic references to named people, actions, or events, but lacks identifiable names, timelines, or concrete detail. These hints are too weak to provide grounding for contextual generation.",
+
+    "The response includes at least one identifiable person, place, event, or situation — whether real or fictional — even if it’s brief, factual, or indirect. Format does not matter (e.g., a quiz or summary is fine).",
+
+    "The response contains several identifiable or named elements — such as people, places, actions, or events — with enough contextual signals to suggest a grounded or coherent setting. Depth is not required, but the setting is specific.",
+
+    "The response contains rich contextual content with multiple interrelated named people, locations, or events, or with clear internal coherence. It shows a strong sense of who is involved, where, and what’s happening, regardless of whether it's descriptive, factual, or structured."
     ]
-    evaluate(dataset, instruction, ref_ans, criteria, desc, trunc_length=512, max_new_tokens=256, batch_size=8)
+
+
+    evaluate(dataset, instruction, ref_ans, criteria, desc, trunc_length=5000, max_new_tokens=256, batch_size=4)
 
 if __name__ == "__main__":
     main()
