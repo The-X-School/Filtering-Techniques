@@ -10,15 +10,15 @@ all_data = []
 
 for j in cluster_js:
     for i in range(max_i):
-        filename = f"cluster_{j}_{i}.json"
+        filename = os.path.join("data", f"cluster_{j}_{i}.json")
         if os.path.exists(filename):
             with open(filename, 'r', encoding='utf-8') as f:
                 try:
-                    data = json.load(f)
-                    if isinstance(data, list):
-                        all_data.extend(data)
-                    else:
-                        all_data.append(data)
+                    for line in f:
+                        line = line.strip()
+                        if line:
+                            data = json.loads(line)
+                            all_data.append(data)
                 except Exception as e:
                     print(f"Error reading {filename}: {e}")
 
