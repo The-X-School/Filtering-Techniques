@@ -13,12 +13,10 @@ import random
 import numpy as np
 import torch
 from datasets import load_dataset, Dataset
-from transformers import DistilBertTokenizerFast, DistilBertForSequenceClassification
 from transformers.training_args import TrainingArguments
 from transformers.trainer import Trainer
 from sklearn.metrics import precision_recall_fscore_support
 import matplotlib.pyplot as plt
-from huggingface_hub import login
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 
 # 1. Set random seed for reproducibility
@@ -89,9 +87,9 @@ def main():
     texts, labels = preprocess_and_label(rag_ds, wiki_texts, max_samples_per_class=args.max_samples_per_class)
     # Use Llama 3.2 1B tokenizer and model
     model_id = "meta-llama/Llama-3.2-1B"
-    tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True, token="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")
+    tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
     # NOTE: Llama 3.2 1B may not have a sequence classification head by default. If not, you may need to use a text generation approach or add a classification head.
-    model = AutoModelForSequenceClassification.from_pretrained(model_id, num_labels=2, trust_remote_code=True, token="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")
+    model = AutoModelForSequenceClassification.from_pretrained(model_id, num_labels=2, trust_remote_code=True)
     dataset = tokenize(texts, labels, tokenizer)
     dataset = dataset.train_test_split(test_size=0.1, seed=args.seed)
     train_ds, eval_ds = dataset['train'], dataset['test']

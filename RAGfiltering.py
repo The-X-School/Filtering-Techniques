@@ -1,9 +1,6 @@
 import json
 from datasets import load_dataset
 from transformers import GPT2Tokenizer
-from huggingface_hub import login
-HF_TOKEN = "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"
-login(token=HF_TOKEN)
 OUTPUT_PATH = "climblab_detokenized.json"
 MAX_SAMPLES = 10000
 BATCH_SIZE = 10
