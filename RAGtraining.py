@@ -18,6 +18,8 @@ from transformers.training_args import TrainingArguments
 from transformers.trainer import Trainer
 from sklearn.metrics import precision_recall_fscore_support
 import matplotlib.pyplot as plt
+from huggingface_hub import login
+from transformers import AutoTokenizer, AutoModelForSequenceClassification
 
 # 1. Set random seed for reproducibility
 def set_seed(seed=42):
@@ -41,31 +43,24 @@ def parse_args():
 # 3. Load datasets
 def load_rag_and_negative_datasets():
     rag_ds = load_dataset("neural-bridge/rag-dataset-12000", split="train")
-    triviaqa = load_dataset("trivia_qa", "rc", split="train")
-    return rag_ds, triviaqa
+    # Load wikitext-2-raw-v1.json for negatives
+    import json
+    with open("data/wikitext-2-raw-v1/wikitext-2-raw-v1.json", "r", encoding="utf-8") as f:
+        wiki_data = json.load(f)
+    wiki_texts = [ex["text"] for ex in wiki_data["instances"] if ex["text"].strip()]
+    return rag_ds, wiki_texts
 
 # 4. Preprocess and label data, with progress bar
-def preprocess_and_label(rag_ds, triviaqa, max_samples_per_class=5000):
+def preprocess_and_label(rag_ds, wiki_texts, max_samples_per_class=5000):
+    # RAG positives: use only the context field (text-only)
     rag_samples = rag_ds.select(range(min(len(rag_ds), max_samples_per_class)))
-    trivia_samples = triviaqa.select(range(min(len(triviaqa), max_samples_per_class)))
-    # Progress bar for RAG
-    rag_texts = []
-    for ex in tqdm(rag_samples, desc="Preparing RAG positives"):
-        rag_texts.append(f"Context: {ex['context']} Question: {ex['question']} Answer: {ex['answer']}")
+    rag_texts = [ex["context"] for ex in tqdm(rag_samples, desc="Preparing RAG positives") if ex["context"].strip()]
     rag_labels = [1] * len(rag_texts)
-    # Progress bar for negatives
-    trivia_texts = []
-    for ex in tqdm(trivia_samples, desc="Preparing non-RAG negatives"):
-        context = ""
-        search_results = ex.get('search_results', [])
-        if isinstance(search_results, list) and len(search_results) > 0:
-            first_result = search_results[0]
-            if isinstance(first_result, dict):
-                context = first_result.get('search_context', "")
-        trivia_texts.append(f"Context: {context} Question: {ex.get('question', '')} Answer: {ex.get('answer', '')}")
-    trivia_labels = [0] * len(trivia_texts)
-    texts = rag_texts + trivia_texts
-    labels = rag_labels + trivia_labels
+    # Non-RAG negatives: use plain text from wikitext-2-raw-v1
+    wiki_texts = wiki_texts[:max_samples_per_class]
+    wiki_labels = [0] * len(wiki_texts)
+    texts = rag_texts + wiki_texts
+    labels = rag_labels + wiki_labels
     # Shuffle
     combined = list(zip(texts, labels))
     random.shuffle(combined)
@@ -90,13 +85,16 @@ def compute_metrics(eval_pred):
 def main():
     args = parse_args()
     set_seed(args.seed)
-    rag_ds, triviaqa = load_rag_and_negative_datasets()
-    texts, labels = preprocess_and_label(rag_ds, triviaqa, max_samples_per_class=args.max_samples_per_class)
-    tokenizer = DistilBertTokenizerFast.from_pretrained("distilbert-base-uncased")
+    rag_ds, wiki_texts = load_rag_and_negative_datasets()
+    texts, labels = preprocess_and_label(rag_ds, wiki_texts, max_samples_per_class=args.max_samples_per_class)
+    # Use Llama 3.2 1B tokenizer and model
+    model_id = "meta-llama/Llama-3.2-1B"
+    tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True, token="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")
+    # NOTE: Llama 3.2 1B may not have a sequence classification head by default. If not, you may need to use a text generation approach or add a classification head.
+    model = AutoModelForSequenceClassification.from_pretrained(model_id, num_labels=2, trust_remote_code=True, token="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")
     dataset = tokenize(texts, labels, tokenizer)
     dataset = dataset.train_test_split(test_size=0.1, seed=args.seed)
     train_ds, eval_ds = dataset['train'], dataset['test']
-    model = DistilBertForSequenceClassification.from_pretrained("distilbert-base-uncased", num_labels=2)
     training_args = TrainingArguments(
         output_dir=args.output_dir,
         learning_rate=2e-5,
@@ -107,7 +105,6 @@ def main():
         logging_dir="./logs",
         logging_steps=50,
         save_total_limit=2,
-        # load_best_model_at_end=True,  # This would reload the best model (on eval loss) at the end of training, but requires matching save/eval strategies.
     )
     trainer = Trainer(
         model=model,
