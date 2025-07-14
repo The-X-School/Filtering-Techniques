@@ -12,6 +12,6 @@ for model in "${models[@]}"; do
       --stride 512 \
       --batch_size 1 \
       --part $part \
-      --cluster stage2_10k_preselect
+      --cluster cluster_8_0_10k
   done
 done

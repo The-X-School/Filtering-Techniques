@@ -1,6 +1,15 @@
 import json
 import argparse
 
+"""
+This script takes in input as a json in LMFlow format and converts it
+to a normal jsonl file with just "text" label
+
+To run this code:
+python lmflow_to_jsonl.py path/to/input.jsonl path/to/output.jsonl
+
+"""
+
 def convert_to_jsonl(input_file, output_file):
     with open(input_file, 'r', encoding='utf-8') as f:
         data = json.load(f)

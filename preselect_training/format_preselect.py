@@ -2,6 +2,18 @@ import json
 import argparse
 from collections import Counter
 
+"""
+This script takes in input as a jsonl and extracts the "text" field,
+outputting to a new file.
+
+If the data has "__label__1" in the metadata (added after preselect training, ignore otherwise)
+the code will count the frequency of values (rounding to 2 decimal places)
+
+To run this code:
+python format_preselect.py path/to/input.jsonl path/to/output.jsonl
+
+"""
+
 def format(input_file, output_file):
     label_counter = Counter()
     with open(input_file, 'r', encoding='utf-8') as infile, open(output_file, 'w', encoding='utf-8') as outfile:

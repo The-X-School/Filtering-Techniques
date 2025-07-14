@@ -2,6 +2,19 @@ import json
 import argparse
 import os
 
+"""
+This script takes in input as a jsonl or json file and 
+formats it into the other one. It can change files from
+jsonl -> json and also json -> jsonl
+
+To go from json to jsonl:
+python json_to_jsonl.py data.json data.jsonl
+
+jsonl to json:
+python json_to_jsonl.py data.jsonl data.json
+
+"""
+
 def jsonl_to_json(jsonl_path, json_path):
     data = []
     with open(jsonl_path, 'r', encoding='utf-8') as f:
@@ -22,9 +35,6 @@ def json_to_jsonl(json_path, jsonl_path):
         for item in data:
             f.write(json.dumps(item, ensure_ascii=False) + '\n')
     print(f"Converted {json_path} to {jsonl_path}")
-
-# python json_to_jsonl.py data.json data.jsonl
-# python json_to_jsonl.py data.jsonl data.json
 
 def main():
     parser = argparse.ArgumentParser(description="Convert between JSON and JSONL formats.")

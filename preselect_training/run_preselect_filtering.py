@@ -6,7 +6,7 @@ import argparse
 from pathlib import Path
 
 # install packages before running this
-# pip install datatrove datasets orjson fasteners fasttext-numpy2-wheel
+# pip install datatrove datasets orjson fasteners fasttext-numpy2-wheel regex multiprocess dill
 
 def run_command(command, check=True):
     print(f"Running: {command}")
