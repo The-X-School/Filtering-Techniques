@@ -1,0 +1,4 @@
+Host 152.70.127.5
+    HostName 152.70.127.5
+    User ubuntu
+    IdentityFile /Users/unosa/Downloads/group_lambda_key
