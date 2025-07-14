@@ -88,8 +88,18 @@ def main():
     # Use Llama 3.2 1B tokenizer and model
     model_id = "meta-llama/Llama-3.2-1B"
     tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
-    # NOTE: Llama 3.2 1B may not have a sequence classification head by default. If not, you may need to use a text generation approach or add a classification head.
     model = AutoModelForSequenceClassification.from_pretrained(model_id, num_labels=2, trust_remote_code=True)
+    # Ensure pad_token is set (fixes padding error for Llama models)
+    if tokenizer.pad_token is None:
+        tokenizer.add_special_tokens({'pad_token': '[PAD]'})
+        tokenizer.pad_token = '[PAD]'
+        model.resize_token_embeddings(len(tokenizer))
+    # Explicitly set pad_token_id for model if possible
+    if hasattr(model, 'config'):
+        model.config.pad_token_id = tokenizer.pad_token_id
+    print(f"tokenizer.pad_token: {tokenizer.pad_token}, pad_token_id: {tokenizer.pad_token_id}")
+    if hasattr(model, 'config'):
+        print(f"model.config.pad_token_id: {model.config.pad_token_id}")
     dataset = tokenize(texts, labels, tokenizer)
     dataset = dataset.train_test_split(test_size=0.1, seed=args.seed)
     train_ds, eval_ds = dataset['train'], dataset['test']
