@@ -40,25 +40,25 @@ def parse_args():
 
 # 3. Load datasets
 def load_rag_and_negative_datasets():
-    rag_ds = load_dataset("neural-bridge/rag-dataset-12000", split="train")
-    # Load wikitext-2-raw-v1.json for negatives
-    import json
-    with open("data/wikitext-2-raw-v1/wikitext-2-raw-v1.json", "r", encoding="utf-8") as f:
-        wiki_data = json.load(f)
-    wiki_texts = [ex["text"] for ex in wiki_data["instances"] if ex["text"].strip()]
-    return rag_ds, wiki_texts
+    # RAG-positive: HotpotQA context
+    from datasets import load_dataset
+    hotpot = load_dataset("hotpot_qa", split="train")
+    rag_texts = [ex["context"] for ex in hotpot if ex["context"].strip()]
+    # RAG-negative: BookCorpus text
+    bookcorpus = load_dataset("bookcorpus", split="train")
+    nonrag_texts = [ex["text"] for ex in bookcorpus if ex["text"].strip()]
+    return rag_texts, nonrag_texts
 
 # 4. Preprocess and label data, with progress bar
-def preprocess_and_label(rag_ds, wiki_texts, max_samples_per_class=5000):
-    # RAG positives: use only the context field (text-only)
-    rag_samples = rag_ds.select(range(min(len(rag_ds), max_samples_per_class)))
-    rag_texts = [ex["context"] for ex in tqdm(rag_samples, desc="Preparing RAG positives") if ex["context"].strip()]
+def preprocess_and_label(rag_texts, nonrag_texts, max_samples_per_class=5000):
+    # RAG positives: HotpotQA context
+    rag_texts = rag_texts[:max_samples_per_class]
     rag_labels = [1] * len(rag_texts)
-    # Non-RAG negatives: use plain text from wikitext-2-raw-v1
-    wiki_texts = wiki_texts[:max_samples_per_class]
-    wiki_labels = [0] * len(wiki_texts)
-    texts = rag_texts + wiki_texts
-    labels = rag_labels + wiki_labels
+    # Non-RAG negatives: BookCorpus text
+    nonrag_texts = nonrag_texts[:max_samples_per_class]
+    nonrag_labels = [0] * len(nonrag_texts)
+    texts = rag_texts + nonrag_texts
+    labels = rag_labels + nonrag_labels
     # Shuffle
     combined = list(zip(texts, labels))
     random.shuffle(combined)
@@ -83,8 +83,8 @@ def compute_metrics(eval_pred):
 def main():
     args = parse_args()
     set_seed(args.seed)
-    rag_ds, wiki_texts = load_rag_and_negative_datasets()
-    texts, labels = preprocess_and_label(rag_ds, wiki_texts, max_samples_per_class=args.max_samples_per_class)
+    rag_texts, nonrag_texts = load_rag_and_negative_datasets()
+    texts, labels = preprocess_and_label(rag_texts, nonrag_texts, max_samples_per_class=args.max_samples_per_class)
     # Use Llama 3.2 1B tokenizer and model
     model_id = "meta-llama/Llama-3.2-1B"
     tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
