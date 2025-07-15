@@ -43,7 +43,7 @@ def load_rag_and_negative_datasets():
     # RAG-positive: HotpotQA context (distractor config)
     from datasets import load_dataset
     hotpot = load_dataset("hotpot_qa", "distractor", split="train")
-    rag_texts = [ex["context"] for ex in hotpot if ex["context"].strip()]
+    rag_texts = [" ".join(ex["context"]).strip() for ex in hotpot if "context" in ex and isinstance(ex["context"], list) and any(s.strip() for s in ex["context"])]
     # RAG-negative: BookCorpus text
     bookcorpus = load_dataset("bookcorpus", split="train")
     nonrag_texts = [ex["text"] for ex in bookcorpus if ex["text"].strip()]
