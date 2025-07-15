@@ -40,6 +40,7 @@ def detokenize_climblab():
     count = 0
     batch = []
     all_results = []
+    sample_count = 0
     for sample in dataset:
         if MAX_SAMPLES and count >= MAX_SAMPLES:
             break
@@ -49,9 +50,13 @@ def detokenize_climblab():
         if tokens is None or not isinstance(tokens, list) or len(tokens) == 0 or len(tokens) > 100000:
             continue
         batch.append({"tokens": tokens})
+        sample_count += 1
         if len(batch) >= BATCH_SIZE:
+            print(f"Processing batch at sample {sample_count} (filtered so far: {count})")
             texts = detokenize_batch(batch)
+            print("Detokenized batch sample:", texts[:2])
             preds = classify_texts(texts)
+            print("Classifier preds sample:", preds[:2])
             for text, pred in zip(texts, preds):
                 if MAX_SAMPLES and count >= MAX_SAMPLES:
                     break
@@ -60,14 +65,19 @@ def detokenize_climblab():
                     count += 1
             batch = []
     if batch and (not MAX_SAMPLES or count < MAX_SAMPLES):
+        print(f"Processing final batch at sample {sample_count} (filtered so far: {count})")
         texts = detokenize_batch(batch)
+        print("Detokenized batch sample:", texts[:2])
         preds = classify_texts(texts)
+        print("Classifier preds sample:", preds[:2])
         for text, pred in zip(texts, preds):
             if MAX_SAMPLES and count >= MAX_SAMPLES:
                 break
             if text and len(text.strip()) > 10 and pred == 1:
                 all_results.append({"text": text})
                 count += 1
+    print(f"Total filtered samples: {count}")
+    print("First 2 filtered samples:", all_results[:2])
     with open(OUTPUT_PATH, "w", encoding="utf-8") as f_out:
         json.dump(all_results, f_out, ensure_ascii=False, indent=2)
 

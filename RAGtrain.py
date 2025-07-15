@@ -44,9 +44,13 @@ def load_rag_and_negative_datasets():
     from datasets import load_dataset
     hotpot = load_dataset("hotpot_qa", "distractor", split="train")
     rag_texts = [" ".join(ex["context"]).strip() for ex in hotpot if "context" in ex and isinstance(ex["context"], list) and any(s.strip() for s in ex["context"])]
+    print(f"Loaded {len(rag_texts)} RAG-positive samples (HotpotQA)")
+    print("Sample RAG-positive:", rag_texts[:2])
     # RAG-negative: BookCorpus text
     bookcorpus = load_dataset("bookcorpus", split="train")
     nonrag_texts = [ex["text"] for ex in bookcorpus if ex["text"].strip()]
+    print(f"Loaded {len(nonrag_texts)} RAG-negative samples (BookCorpus)")
+    print("Sample RAG-negative:", nonrag_texts[:2])
     return rag_texts, nonrag_texts
 
 # 4. Preprocess and label data, with progress bar
@@ -59,6 +63,8 @@ def preprocess_and_label(rag_texts, nonrag_texts, max_samples_per_class=5000):
     nonrag_labels = [0] * len(nonrag_texts)
     texts = rag_texts + nonrag_texts
     labels = rag_labels + nonrag_labels
+    print(f"After preprocessing: {len(texts)} total samples ({len(rag_texts)} RAG, {len(nonrag_texts)} non-RAG)")
+    print("Sample combined:", list(zip(texts, labels))[:2])
     # Shuffle
     combined = list(zip(texts, labels))
     random.shuffle(combined)
@@ -69,6 +75,7 @@ def preprocess_and_label(rag_texts, nonrag_texts, max_samples_per_class=5000):
 def tokenize(texts, labels, tokenizer, max_length=384):
     encodings = tokenizer(list(texts), truncation=True, padding=True, max_length=max_length)
     encodings['labels'] = list(labels)
+    print(f"Tokenized {len(texts)} samples. Example input_ids:", encodings['input_ids'][:2])
     return Dataset.from_dict(encodings)
 
 # 6. Compute metrics (accuracy, precision, recall, F1)
