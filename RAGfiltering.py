@@ -74,6 +74,7 @@ def detokenize_climblab():
                 count += 1
     print(f"Total samples processed: {sample_count}")
     print(f"Total filtered samples: {count}")
+    print(f"Total samples filtered out: {sample_count - count}")
     with open(OUTPUT_PATH, "w", encoding="utf-8") as f_out:
         json.dump(all_results, f_out, ensure_ascii=False, indent=2)
 
