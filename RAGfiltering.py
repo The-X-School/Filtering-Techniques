@@ -52,11 +52,14 @@ def detokenize_climblab():
         batch.append({"tokens": tokens})
         sample_count += 1
         if len(batch) >= BATCH_SIZE:
-            print(f"Processing batch at sample {sample_count} (filtered so far: {count})")
+            if sample_count % 1000 < BATCH_SIZE:
+                print(f"Processed {sample_count} samples (filtered so far: {count})")
             texts = detokenize_batch(batch)
-            print("Detokenized batch sample:", texts[:2])
+            if sample_count % 1000 < BATCH_SIZE:
+                print("Detokenized batch sample:", texts[:2])
             preds = classify_texts(texts)
-            print("Classifier preds sample:", preds[:2])
+            if sample_count % 1000 < BATCH_SIZE:
+                print("Classifier preds sample:", preds[:2])
             for text, pred in zip(texts, preds):
                 if MAX_SAMPLES and count >= MAX_SAMPLES:
                     break
