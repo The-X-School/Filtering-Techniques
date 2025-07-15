@@ -40,9 +40,9 @@ def parse_args():
 
 # 3. Load datasets
 def load_rag_and_negative_datasets():
-    # RAG-positive: HotpotQA context
+    # RAG-positive: HotpotQA context (distractor config)
     from datasets import load_dataset
-    hotpot = load_dataset("hotpot_qa", split="train")
+    hotpot = load_dataset("hotpot_qa", "distractor", split="train")
     rag_texts = [ex["context"] for ex in hotpot if ex["context"].strip()]
     # RAG-negative: BookCorpus text
     bookcorpus = load_dataset("bookcorpus", split="train")
