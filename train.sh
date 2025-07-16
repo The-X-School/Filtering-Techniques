@@ -4,7 +4,6 @@
 # --- Configuration ---
 # Parses arguments
 model_name_or_path=data4elm/Llama-400M-12L
-initial_dataset_path=data/filtered_output/embeddings.jsonl
 output_dir=output_models/finetune_curriculum
 deepspeed_args="--master_port=11000"
 trust_remote_code=0
@@ -15,10 +14,6 @@ while [[ $# -ge 1 ]]; do
   case ${key} in
     -m|--model_name_or_path)
       model_name_or_path="$2"
-      shift
-      ;;
-    -d|--dataset_path)
-      initial_dataset_path="$2"
       shift
       ;;
     -o|--output_dora_path)
@@ -45,30 +40,13 @@ while [[ $# -ge 1 ]]; do
 done
 
 # --- Setup ---
-project_dir=$(cd "$(dirname $0)"/..; pwd)
+project_dir=$(cd "$(dirname $0)"; pwd)
+cd "${project_dir}" # Change to project root
+
 exp_id=finetune_with_curriculum_dora
 log_dir=${project_dir}/log/${exp_id}
-curriculum_data_dir=${project_dir}/curriculum_data
-mkdir -p ${output_dir} ${log_dir} ${curriculum_data_dir}
-
-# --- Step 0: Generate Embeddings ---
-echo "--- Generating embeddings... ---"
-python generate_embeddings.py
-if [ $? -ne 0 ]; then
-    echo "Error: Embedding generation failed."
-    exit 1
-fi
-echo "--- Embedding generation complete. ---"
-
-# --- Step 1: Prepare Curriculum Data ---
-echo "--- Preparing curriculum data... ---"
-python prepare_curriculum_data.py "${initial_dataset_path}" "${curriculum_data_dir}" "${num_curriculum_stages}"
-if [ $? -ne 0 ]; then
-    echo "Error: Curriculum data preparation failed."
-    exit 1
-fi
-echo "--- Curriculum data preparation complete. ---"
-
+curriculum_data_dir="/home/ubuntu/curriculum_data"
+mkdir -p ${output_dir} ${log_dir}
 
 # --- Step 2: Finetune with Curriculum Learning ---
 current_model_path=${model_name_or_path}
@@ -93,9 +71,9 @@ for ((stage=0; stage<${num_curriculum_stages}; stage++)); do
         --per_device_train_batch_size 24 \
         --use_dora 1 \
         --lora_r 16 \
-        --lora_target_modules="embed_tokens,q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj,lm_head" \
+        --lora_target_modules="q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj,lm_head" \
         --save_aggregated_lora 0 \
-        --deepspeed configs/ds_config_zero0_no_offload.json \
+        --deepspeed "/home/ubuntu/Filtering-Techniques/configs/ds_config_zero0_no_offload.json" \
         --bf16 \
         --run_name "${exp_id}_stage_${stage_num}" \
         --validation_split_percentage 0 \
@@ -120,4 +98,3 @@ done
 
 echo "--- Curriculum training finished successfully! ---"
 echo "Final model saved in ${output_dir}/stage_${num_curriculum_stages}"
-

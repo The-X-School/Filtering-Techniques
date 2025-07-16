@@ -1,6 +1,7 @@
 import argparse
 import os
 import torch
+import json
 from datasets import load_dataset
 from transformers import (
     AutoModelForCausalLM,
@@ -40,6 +41,16 @@ def main():
     parser.add_argument("--trust_remote_code", type=int, default=0, help="Whether to trust remote code when loading models/tokenizers.")
 
     args = parser.parse_args()
+
+    # Load the deepspeed config file
+    if args.deepspeed:
+        with open(args.deepspeed, "r") as f:
+            deepspeed_config = json.load(f)
+    else:
+        deepspeed_config = None
+
+    # Override the deepspeed argument with the loaded config
+    args.deepspeed = deepspeed_config
 
     # Load tokenizer and model
     tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, trust_remote_code=bool(args.trust_remote_code))
@@ -81,7 +92,9 @@ def main():
     dataset = load_dataset("json", data_files=args.dataset_path, split="train")
 
     def tokenize_function(examples):
-        return tokenizer(examples["text"], truncation=True, max_length=args.block_size)
+        tokenized_examples = tokenizer(examples["text"], truncation=True, max_length=args.block_size, padding="max_length")
+        tokenized_examples["labels"] = tokenized_examples["input_ids"].copy()
+        return tokenized_examples
 
     tokenized_dataset = dataset.map(
         tokenize_function,
