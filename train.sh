@@ -48,6 +48,27 @@ log_dir=${project_dir}/log/${exp_id}
 curriculum_data_dir="/home/ubuntu/curriculum_data"
 mkdir -p ${output_dir} ${log_dir}
 
+# Ensure configs directory exists
+configs_dir="${project_dir}/configs"
+mkdir -p "${configs_dir}"
+
+# Create DeepSpeed config file if it doesn't exist
+deepspeed_config_path="${configs_dir}/ds_config_zero0_no_offload.json"
+if [ ! -f "${deepspeed_config_path}" ]; then
+    echo "Creating DeepSpeed config file: ${deepspeed_config_path}"
+    cat <<EOF > "${deepspeed_config_path}"
+{
+  "zero_optimization": {
+    "stage": 0
+  },
+  "gradient_accumulation_steps": 1,
+  "gradient_clipping": 1.0,
+  "train_batch_size": "auto",
+  "train_micro_batch_size_per_gpu": "auto"
+}
+EOF
+fi
+
 # --- Step 2: Finetune with Curriculum Learning ---
 current_model_path=${model_name_or_path}
 
