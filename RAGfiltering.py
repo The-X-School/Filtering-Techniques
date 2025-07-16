@@ -2,6 +2,7 @@ import json
 from datasets import load_dataset
 from transformers import AutoTokenizer, AutoModelForSequenceClassification, GPT2Tokenizer
 import torch
+from tqdm import tqdm
 
 OUTPUT_PATH = "RAGfiltered.json"
 MAX_SAMPLES = 20000
@@ -41,8 +42,9 @@ def detokenize_climblab():
     batch = []
     all_results = []
     sample_count = 0
+    pbar = tqdm(total=MAX_SAMPLES, desc="Processing samples")
     for sample in dataset:
-        if MAX_SAMPLES and count >= MAX_SAMPLES:
+        if sample_count >= MAX_SAMPLES:
             break
         if not isinstance(sample, dict):
             continue
@@ -51,27 +53,23 @@ def detokenize_climblab():
             continue
         batch.append({"tokens": tokens})
         sample_count += 1
-        if sample_count % 1000 == 0:
-            print(f"Processed {sample_count} samples so far...")
+        pbar.update(1)
         if len(batch) >= BATCH_SIZE:
             texts = detokenize_batch(batch)
             preds = classify_texts(texts)
             for text, pred in zip(texts, preds):
-                if MAX_SAMPLES and count >= MAX_SAMPLES:
-                    break
                 if text and len(text.strip()) > 10 and pred == 1:
                     all_results.append({"text": text})
                     count += 1
             batch = []
-    if batch and (not MAX_SAMPLES or count < MAX_SAMPLES):
+    if batch:
         texts = detokenize_batch(batch)
         preds = classify_texts(texts)
         for text, pred in zip(texts, preds):
-            if MAX_SAMPLES and count >= MAX_SAMPLES:
-                break
             if text and len(text.strip()) > 10 and pred == 1:
                 all_results.append({"text": text})
                 count += 1
+    pbar.close()
     print(f"Total samples processed: {sample_count}")
     print(f"Total filtered samples: {count}")
     print(f"Total samples filtered out: {sample_count - count}")
