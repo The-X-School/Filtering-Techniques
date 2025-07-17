@@ -40,31 +40,59 @@ def parse_args():
 
 # 3. Load datasets
 def load_rag_and_negative_datasets():
-    # RAG-positive: HotpotQA context (distractor config)
+    # RAG-positive: Combine RAG12000 and HotpotQA only
     from datasets import load_dataset
-    hotpot = load_dataset("hotpot_qa", "distractor", split="train")
-    rag_texts = [" ".join(ex["context"]).strip() for ex in hotpot if "context" in ex and isinstance(ex["context"], list) and any(s.strip() for s in ex["context"])]
-    print(f"Loaded {len(rag_texts)} RAG-positive samples (HotpotQA)")
-    print("Sample RAG-positive:", rag_texts[:2])
+    rag_texts = []
+    
+    # Load RAG12000
+    try:
+        rag12000 = load_dataset("neural-bridge/rag-dataset-12000", split="train")
+        rag12000_texts = [ex["context"] for ex in rag12000 if ex["context"].strip()]
+        rag_texts.extend(rag12000_texts)
+        print(f"Loaded {len(rag12000_texts)} samples from RAG12000")
+    except Exception as e:
+        print(f"Could not load RAG12000: {e}")
+    
+    # Load HotpotQA
+    try:
+        hotpot = load_dataset("hotpot_qa", "distractor", split="train")
+        hotpot_texts = [" ".join(ex["context"]).strip() for ex in hotpot if "context" in ex and isinstance(ex["context"], list) and any(s.strip() for s in ex["context"])]
+        rag_texts.extend(hotpot_texts)
+        print(f"Loaded {len(hotpot_texts)} samples from HotpotQA")
+    except Exception as e:
+        print(f"Could not load HotpotQA: {e}")
+    
+    print(f"Total RAG-positive samples: {len(rag_texts)}")
+    
     # RAG-negative: BookCorpus text
-    bookcorpus = load_dataset("bookcorpus", split="train")
-    nonrag_texts = [ex["text"] for ex in bookcorpus if ex["text"].strip()]
-    print(f"Loaded {len(nonrag_texts)} RAG-negative samples (BookCorpus)")
-    print("Sample RAG-negative:", nonrag_texts[:2])
+    try:
+        bookcorpus = load_dataset("bookcorpus", split="train")
+        nonrag_texts = [ex["text"] for ex in bookcorpus if ex["text"].strip()]
+        print(f"Loaded {len(nonrag_texts)} samples from BookCorpus")
+    except Exception as e:
+        print(f"Could not load BookCorpus: {e}")
+        nonrag_texts = []
+    
     return rag_texts, nonrag_texts
 
 # 4. Preprocess and label data, with progress bar
-def preprocess_and_label(rag_texts, nonrag_texts, max_samples_per_class=5000):
-    # RAG positives: HotpotQA context
-    rag_texts = rag_texts[:max_samples_per_class]
+def preprocess_and_label(rag_texts, nonrag_texts, max_samples_per_class=None):
+    # RAG positives: Use all available samples
+    if max_samples_per_class:
+        rag_texts = rag_texts[:max_samples_per_class]
     rag_labels = [1] * len(rag_texts)
-    # Non-RAG negatives: BookCorpus text
-    nonrag_texts = nonrag_texts[:max_samples_per_class]
+    
+    # Non-RAG negatives: Use all available samples
+    if max_samples_per_class:
+        nonrag_texts = nonrag_texts[:max_samples_per_class]
     nonrag_labels = [0] * len(nonrag_texts)
+    
     texts = rag_texts + nonrag_texts
     labels = rag_labels + nonrag_labels
+    
     print(f"After preprocessing: {len(texts)} total samples ({len(rag_texts)} RAG, {len(nonrag_texts)} non-RAG)")
     print("Sample combined:", list(zip(texts, labels))[:2])
+    
     # Shuffle
     combined = list(zip(texts, labels))
     random.shuffle(combined)

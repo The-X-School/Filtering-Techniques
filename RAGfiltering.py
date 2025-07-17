@@ -8,6 +8,7 @@ OUTPUT_PATH = "RAGfiltered.json"
 MAX_SAMPLES = 20000
 BATCH_SIZE = 32
 MODEL_PATH = "rag_classifier_model"
+PROB_THRESHOLD = 0.8  # Only keep samples with P(RAG) >= 0.8
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # Use GPT2Tokenizer for detokenization
@@ -23,8 +24,10 @@ def classify_texts(texts):
     with torch.no_grad():
         outputs = model(**encodings)
         logits = outputs.logits
+        probs = torch.softmax(logits, dim=1)
         preds = torch.argmax(logits, dim=1).cpu().tolist()
-    return preds
+        rag_probs = probs[:, 1].cpu().tolist()  # Probability for class 1 (RAG)
+    return preds, rag_probs
 
 def detokenize_batch(batch_data):
     results = []
@@ -56,17 +59,17 @@ def detokenize_climblab():
         pbar.update(1)
         if len(batch) >= BATCH_SIZE:
             texts = detokenize_batch(batch)
-            preds = classify_texts(texts)
-            for text, pred in zip(texts, preds):
-                if text and len(text.strip()) > 10 and pred == 1:
+            preds, rag_probs = classify_texts(texts)
+            for text, pred, prob in zip(texts, preds, rag_probs):
+                if text and len(text.strip()) > 10 and pred == 1 and prob >= PROB_THRESHOLD:
                     all_results.append({"text": text})
                     count += 1
             batch = []
     if batch:
         texts = detokenize_batch(batch)
-        preds = classify_texts(texts)
-        for text, pred in zip(texts, preds):
-            if text and len(text.strip()) > 10 and pred == 1:
+        preds, rag_probs = classify_texts(texts)
+        for text, pred, prob in zip(texts, preds, rag_probs):
+            if text and len(text.strip()) > 10 and pred == 1 and prob >= PROB_THRESHOLD:
                 all_results.append({"text": text})
                 count += 1
     pbar.close()
