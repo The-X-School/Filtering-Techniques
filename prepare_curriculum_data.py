@@ -1,6 +1,7 @@
 import os
 import sys
-import shutil
+import json
+import random
 
 def prepare_curriculum_data(initial_dataset_path, curriculum_data_dir, num_curriculum_stages):
     print(f"Initial dataset path: {initial_dataset_path}")
@@ -9,24 +10,26 @@ def prepare_curriculum_data(initial_dataset_path, curriculum_data_dir, num_curri
 
     os.makedirs(curriculum_data_dir, exist_ok=True)
 
-    # Placeholder logic: Copy the initial dataset to the first stage
-    # You will need to replace this with your actual curriculum splitting logic
-    if os.path.exists(initial_dataset_path):
-        shutil.copy(initial_dataset_path, os.path.join(curriculum_data_dir, "stage_0.jsonl"))
-        print(f"Copied {initial_dataset_path} to {os.path.join(curriculum_data_dir, 'stage_0.jsonl')}")
-    else:
-        print(f"Warning: Initial dataset '{initial_dataset_path}' not found. Creating empty stage_0.jsonl.")
-        with open(os.path.join(curriculum_data_dir, "stage_0.jsonl"), 'w') as f:
-            f.write("")
+    if not os.path.exists(initial_dataset_path):
+        print(f"Error: Initial dataset '{initial_dataset_path}' not found.")
+        sys.exit(1)
 
-    # Create empty files for subsequent stages as placeholders
-    for i in range(1, num_curriculum_stages):
+    with open(initial_dataset_path, 'r') as f:
+        lines = f.readlines()
+
+    random.shuffle(lines)
+
+    chunk_size = len(lines) // num_curriculum_stages
+    for i in range(num_curriculum_stages):
         stage_file_path = os.path.join(curriculum_data_dir, f"stage_{i}.jsonl")
+        start_index = i * chunk_size
+        end_index = (i + 1) * chunk_size if i < num_curriculum_stages - 1 else len(lines)
+        stage_lines = lines[start_index:end_index]
         with open(stage_file_path, 'w') as f:
-            f.write("")
-        print(f"Created empty placeholder for {stage_file_path}")
+            f.writelines(stage_lines)
+        print(f"Created {stage_file_path} with {len(stage_lines)} examples.")
 
-    print("Placeholder curriculum data preparation complete.")
+    print("Curriculum data preparation complete.")
 
 if __name__ == "__main__":
     if len(sys.argv) != 4:

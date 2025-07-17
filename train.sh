@@ -43,6 +43,14 @@ done
 project_dir=$(cd "$(dirname $0)"; pwd)
 cd "${project_dir}" # Change to project root
 
+# --- Prepare Data ---
+bash prepare_curriculum.sh
+if [ $? -ne 0 ]; then
+    echo "Error: Data preparation failed."
+    exit 1
+fi
+
+
 exp_id=finetune_with_curriculum_dora
 log_dir=${project_dir}/log/${exp_id}
 curriculum_data_dir="/home/ubuntu/curriculum_data"
