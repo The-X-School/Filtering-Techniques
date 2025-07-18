@@ -2,12 +2,13 @@ torch>=2.2.0
 transformers==4.41.2
 datasets>=2.14.0
 tqdm>=4.65.0
-huggingface-hub>=0.16.4 
+huggingface-hub>=0.16.4
 peft>=0.11.1
-accelerate==0.28.0
+accelerate>=0.29.3
 bitsandbytes>=0.41.0
 scipy==1.12.0
 numpy==1.26.4
+deepspeed>=0.14.0
 wandb>=0.15.0  # Optional, for experiment tracking
 tensorboard>=2.14.0  # Optional, for logging
 sentence-transformers>=2.7.0  # Required for nvidia/NV-Embed-v2

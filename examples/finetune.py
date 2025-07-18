@@ -42,16 +42,6 @@ def main():
 
     args = parser.parse_args()
 
-    # Load the deepspeed config file
-    if args.deepspeed:
-        with open(args.deepspeed, "r") as f:
-            deepspeed_config = json.load(f)
-    else:
-        deepspeed_config = None
-
-    # Override the deepspeed argument with the loaded config
-    args.deepspeed = deepspeed_config
-
     # Load tokenizer and model
     tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, trust_remote_code=bool(args.trust_remote_code))
     if tokenizer.pad_token is None:
@@ -140,9 +130,13 @@ def main():
         if bool(args.save_aggregated_lora):
             # Save the merged model (LoRA weights merged into base model)
             merged_model_path = os.path.join(args.output_dir, "merged_model")
-            if isinstance(model, PeftModel):
-                model = model.merge_and_unload()
-            model.save_pretrained(merged_model_path)
+            # It's recommended to unload the PeftModel before saving the merged model
+            if isinstance(trainer.model, PeftModel):
+                model_to_save = trainer.model.merge_and_unload()
+            else:
+                model_to_save = trainer.model
+            
+            model_to_save.save_pretrained(merged_model_path)
             tokenizer.save_pretrained(merged_model_path)
             print(f"Aggregated LoRA model saved to {merged_model_path}")
 
